@@ -31,7 +31,7 @@ rescue CheckError => e
   case status
   when 401
     puts "GET_APPROVED_ORGS returned 401: the VEGA_API_KEY secret is missing or invalid."
-    puts "Create it in Admin / Secrets (name VEGA_API_KEY, value = a vgk_... key from the Vega app) and restart #{TARGET}_INT."
+    puts "This script uses the shared-secret path. Users normally enter their own key in the Timeline widget; to fix this path, create the secret in Admin / Secrets (name VEGA_API_KEY, value = a vgk_... key from the Vega app) and restart #{TARGET}_INT."
   when nil
     puts "No response within 15 s - is #{TARGET}_INT connected? (#{e.message})"
   else

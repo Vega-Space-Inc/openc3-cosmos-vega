@@ -12,9 +12,13 @@
 # and the severity key beside it shows the thresholds in force. A minute
 # where the satellite isn't covered/visible from the ground station is
 # plotted as zero interactions (not a gap). If the target has no
-# working Vega connection yet (the VEGA_API_KEY COSMOS secret is missing or
-# invalid), a read-only onboarding state explains what the COSMOS admin has
-# to set up instead.
+# working Vega connection yet, an onboarding state lets the user paste their
+# own Vega frontend API key: it stays in that browser (localStorage) and is
+# sent with each command as the OBFUSCATEd HTTP_HEADER_AUTHORIZATION
+# parameter, which COSMOS masks in Command Sender and the text log and the
+# interface protocol strips from the packet before the command logs are
+# written. The VEGA_API_KEY COSMOS secret is only an optional fallback for
+# the plugin's background polls.
 # Driven by the VEGA COSMOS target's GET_DAY_DETAIL command / DAY_DETAIL
 # telemetry, specifically the per-minute MINUTES_JSON breakdown (real
 # per-band interference counts from admin.vega.space/api/v1/frontend/
@@ -46,26 +50,62 @@
           {{ integrationMessage }}
         </div>
 
-        <!-- Read-only: the key lives in a COSMOS secret the interface
-             protocol injects, so there is nothing for the user to enter
-             here. -->
-        <ol v-if="showSetupSteps" class="onboarding-steps">
-          <li>
-            Create a Vega <em>frontend</em> API key (it starts with
+        <!-- The user's own Vega frontend API key. It is kept in this
+             browser only (localStorage) and sent with each command as the
+             OBFUSCATEd HTTP_HEADER_AUTHORIZATION parameter: COSMOS masks it
+             in Command Sender and the text log, and the interface protocol
+             strips it from the packet before the command logs are written.
+             Nothing is stored server-side. -->
+        <form
+          v-if="showSetupSteps"
+          class="onboarding-keyform"
+          @submit.prevent="saveApiKey"
+        >
+          <label class="onboarding-keylabel" for="vega-api-key">
+            Your Vega API key
+          </label>
+          <div class="onboarding-keyrow">
+            <input
+              id="vega-api-key"
+              v-model="apiKeyInput"
+              class="onboarding-input"
+              type="password"
+              placeholder="vgk_…"
+              autocomplete="off"
+              spellcheck="false"
+              :disabled="savingKey"
+            />
+            <button
+              type="submit"
+              class="onboarding-save"
+              :disabled="savingKey || !apiKeyInput.trim()"
+            >
+              {{ savingKey ? 'Checking…' : 'Connect' }}
+            </button>
+          </div>
+          <div v-if="saveKeyError" class="onboarding-error">
+            {{ saveKeyError }}
+          </div>
+          <div v-if="savedApiKey" class="onboarding-keystatus">
+            A key ending in <code>{{ savedApiKeyTail }}</code> is saved in this
+            browser.
+            <button
+              type="button"
+              class="onboarding-forget"
+              @click="forgetApiKey"
+            >
+              Forget it
+            </button>
+          </div>
+          <div class="onboarding-keynote">
+            Stays in this browser; COSMOS masks it in logs and never stores it.
+            No key yet? Create a <em>frontend</em> API key (it starts with
             <code>vgk_</code>) at
             <a :href="VEGA_API_KEYS_URL" target="_blank" rel="noopener"
               >app.vega.space/settings/api-keys</a
             >.
-          </li>
-          <li>
-            In COSMOS, open <strong>Admin → Secrets</strong> and create a secret
-            named <code>VEGA_API_KEY</code> holding that key.
-          </li>
-          <li>
-            Restart the <code>VEGA_INT</code> interface (Admin → Interfaces) so
-            it picks the secret up, then check again.
-          </li>
-        </ol>
+          </div>
+        </form>
 
         <div class="onboarding-actions">
           <a
@@ -642,6 +682,17 @@ function shortErrorBody(body) {
 const VEGA_API_KEYS_URL = 'https://app.vega.space/settings/api-keys'
 const VEGA_SIGNUP_URL = 'https://app.vega.space/signup'
 const VEGA_APP_URL = 'https://app.vega.space'
+// The user's own Vega API key is kept in this browser only. It is never
+// written to a COSMOS setting (get_setting needs no more than viewer rights,
+// so that would expose it to every user) - see authOverride().
+const API_KEY_LS_KEY = 'vega_widget_api_key'
+function readStoredApiKey() {
+  try {
+    return localStorage.getItem(API_KEY_LS_KEY) || null
+  } catch (e) {
+    return null // storage blocked (private mode etc.) - key lasts this page only
+  }
+}
 // Org workspace pages use /organizations/external/{slug}-{id}/configuration/...
 // - the slug is cosmetic (the route also accepts a bare numeric id with no
 // slug prefix), so we skip generating one and just use the id.
@@ -730,6 +781,11 @@ export default {
       notIntegrated: false,
       // 'checking' | 'connected' | 'missing_key' | 'no_access' | 'unavailable'
       integrationState: 'checking',
+      // Browser-held Vega API key (see API_KEY_LS_KEY) and the entry form
+      apiKeyInput: '',
+      savedApiKey: readStoredApiKey(),
+      savingKey: false,
+      saveKeyError: '',
       checkingIntegration: false,
       // Error from the last "check again" attempt (e.g. the command could not
       // be sent because VEGA_INT is not connected).
@@ -803,12 +859,17 @@ export default {
           (o.satellites_count != null ? ` (${o.satellites_count} sat)` : ''),
       }))
     },
+    savedApiKeyTail() {
+      return this.savedApiKey ? this.savedApiKey.slice(-4) : ''
+    },
     integrationTitle() {
       switch (this.integrationState) {
         case 'no_access':
           return 'No approved organizations yet'
         case 'missing_key':
-          return 'Vega API key missing or invalid'
+          return this.savedApiKey
+            ? 'Vega rejected the saved API key'
+            : 'Enter your Vega API key'
         case 'checking':
           return 'Checking the Vega connection…'
         default:
@@ -825,7 +886,9 @@ export default {
         case 'no_access':
           return `The API key works, but its user has no approved organization access${detail}. Approve an organization in Vega, then check again.`
         case 'missing_key':
-          return `Vega rejected the API key (HTTP 401${detail}). A COSMOS admin needs to configure it as a COSMOS secret - the widget never handles it:`
+          return this.savedApiKey
+            ? `Vega rejected the saved API key (HTTP 401${detail}). Enter a new one below.`
+            : 'Vega needs your API key to load forecasts. Paste it below - it stays in this browser.'
         case 'checking':
           return 'Reading the last Vega response from COSMOS…'
         default:
@@ -833,7 +896,11 @@ export default {
             this.integrationStatus
               ? `Vega returned HTTP ${this.integrationStatus}${detail}.`
               : 'COSMOS has no response from VEGA_INT yet.'
-          } A COSMOS admin should confirm the setup below, then check again:`
+          } Check that the VEGA_INT interface is connected, then check again${
+            this.savedApiKey
+              ? ''
+              : ' - and if you have not entered your Vega API key yet, add it below'
+          }.`
       }
     },
     // The setup steps only help when the setup is what's missing - in
@@ -1396,7 +1463,7 @@ export default {
         const before = await this.readPackets(INTEGRATION_SPEC)
         const okStamp = stampOf(before.APPROVED_ORGS)
         const errStamp = stampOf(before[ERROR_PACKET])
-        await this.api.cmd('VEGA', 'GET_APPROVED_ORGS')
+        await this.api.cmd('VEGA', 'GET_APPROVED_ORGS', this.authOverride())
         const deadline = Date.now() + INTEGRATION_CHECK_TIMEOUT_MS
         while (Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
@@ -1440,6 +1507,50 @@ export default {
       // Setting this triggers the selectedOrgId watcher, which does the
       // actual workspace fetch.
       this.selectedOrgId = this.organizations[0].id
+    },
+    // --- The user's own Vega API key (browser-only) ---
+    // Sent with every command as the OBFUSCATEd HTTP_HEADER_AUTHORIZATION
+    // parameter. Absent -> the interface falls back to the VEGA_API_KEY secret.
+    authOverride() {
+      return this.savedApiKey
+        ? { HTTP_HEADER_AUTHORIZATION: `Bearer ${this.savedApiKey}` }
+        : {}
+    },
+    async saveApiKey() {
+      const key = (this.apiKeyInput || '').trim()
+      if (!key) return
+      if (!key.startsWith('vgk_')) {
+        this.saveKeyError =
+          'Enter a Vega frontend API key - it starts with vgk_.'
+        return
+      }
+      this.saveKeyError = ''
+      this.savingKey = true
+      try {
+        this.savedApiKey = key
+        try {
+          localStorage.setItem(API_KEY_LS_KEY, key)
+        } catch (e) {
+          // storage blocked: the key still works for this page load
+        }
+        this.apiKeyInput = ''
+        await this.retryIntegrationCheck()
+        if (this.integrationState === 'missing_key') {
+          this.saveKeyError =
+            'Vega rejected that key (HTTP 401). Check it and try again.'
+        }
+      } finally {
+        this.savingKey = false
+      }
+    },
+    forgetApiKey() {
+      this.savedApiKey = null
+      try {
+        localStorage.removeItem(API_KEY_LS_KEY)
+      } catch (e) {
+        // nothing stored
+      }
+      this.setIntegrationState('missing_key')
     },
     setIntegrationState(state, status = null, detail = '') {
       this.integrationState = state
@@ -2290,7 +2401,7 @@ export default {
       })
       const stamp = stampOf(before[packet])
       const errStamp = stampOf(before[ERROR_PACKET])
-      await this.api.cmd('VEGA', command, params)
+      await this.api.cmd('VEGA', command, { ...this.authOverride(), ...params })
       const pollSpec = {
         [packet]: ['RECEIVED_TIMESECONDS', 'HTTP_STATUS', ...echo],
         [ERROR_PACKET]: ERROR_ITEMS,
@@ -2477,6 +2588,63 @@ export default {
   font-size: 10px;
   opacity: 0.75;
   letter-spacing: 0.04em;
+}
+/* Onboarding: the user's own API key */
+.onboarding-keyform {
+  margin: 14px 0 6px;
+  max-width: 520px;
+}
+.onboarding-keylabel {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+.onboarding-keyrow {
+  display: flex;
+  gap: 8px;
+}
+.onboarding-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.onboarding-save {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(79, 195, 247, 0.6);
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+  font: inherit;
+  cursor: pointer;
+}
+.onboarding-save:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.onboarding-keystatus,
+.onboarding-keynote {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+.onboarding-forget {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  cursor: pointer;
 }
 .reset-zoom-btn {
   padding: 3px 10px;

@@ -44,39 +44,45 @@ history.
 
 ## Setup
 
-This plugin authenticates with a **frontend API key** (`vgk_...` prefix,
-scoped to one Vega user), not an account-level API token - the two are
-different credential types and are not interchangeable.
+Two ways to give the plugin a Vega API key. Both use a **frontend API key**
+(`vgk_...` prefix, scoped to one Vega user) - not an account-level API token;
+the two are different credential types and are not interchangeable.
 
-The key is never part of the plugin configuration. It is stored as a COSMOS
-secret and injected into the `Authorization` header by a write protocol
-(`targets/VEGA/lib/api_key_protocol.rb`) after each command has been logged,
-so it does not appear in plugin variables, command definitions, the command
-log, or Command Sender.
+**Normal: each user enters their own key on the dashboard.** Open the
+Timeline widget (`targets/VEGA/screens/forecast.txt`). If COSMOS has no
+working key it shows a form: create a key at the Vega app's API Keys page,
+paste it in, Connect. The key stays in that browser (localStorage) and is
+sent with each command as the `HTTP_HEADER_AUTHORIZATION` parameter, which is
+`OBFUSCATE`d (masked in Command Sender and the text command log) and stripped
+from the packet by `targets/VEGA/lib/api_key_protocol.rb` before the command
+logs are written. COSMOS never stores it.
 
-1. Create a frontend API key in the Vega app under your account's API Keys
-   page
-2. In COSMOS open **Admin -> Secrets** and add a secret named `VEGA_API_KEY`
-   whose value is that key (just the `vgk_...` string, no `Bearer ` prefix)
-3. Install this plugin (see below) with `vega_org_id` left at its default
-   (`0`). If the plugin was already installed before the secret existed,
-   disconnect and reconnect `VEGA_INT` (or reinstall) so the interface
-   container picks it up - a missing secret logs
-   `VEGA_API_KEY not set - create it in Admin / Secrets and restart VEGA_INT`
-   once and every authenticated request lands in `ERROR_RESPONSE` with
-   `HTTP_STATUS` 401
-4. Open the VEGA target's `Status` screen - `VEGA APPROVED_ORGS HTTP_STATUS`
-   should read 200, and `FIRST_ORG_ID` / `FIRST_ORG_NAME` show one of your
-   approved organizations. (Or run `GET /api/v1/frontend/organization_requests/approved_organizations`
-   yourself to see the full list - a key's user can have several approved orgs.)
-   `targets/VEGA/procedures/procedure.rb` does this check from Script Runner
-   and then walks the status-screen alerts with injected telemetry.
-5. Reinstall/reconfigure the plugin with `vega_org_id` set to the org id you
-   want `WORKSPACE` and `FORECASTING_SUMMARY` to poll
+**Optional: a shared key for the background polls.** The periodic `GET_HEALTH`
+/ `GET_APPROVED_ORGS` / `GET_WORKSPACE` / `GET_FORECASTING_SUMMARY` polls that
+feed the Status screen send no per-request token, so they use the COSMOS
+secret `VEGA_API_KEY` if one exists: Admin -> Secrets, name `VEGA_API_KEY`,
+value = a `vgk_...` key (no `Bearer ` prefix), then restart `VEGA_INT` so the
+interface picks it up. Without it those polls return 401 into
+`ERROR_RESPONSE`, which is harmless - the widget still works with a user's
+key. A key entered on the dashboard always wins for that request.
 
-To rotate the key, change the secret's value in Admin -> Secrets and
-reconnect `VEGA_INT`; no plugin reinstall is needed. Revoke it in the Vega app
-if this COSMOS instance is ever decommissioned.
+Then:
+
+1. Install this plugin (see below) with `vega_org_id` left at its default
+   (`0`)
+2. Open the Timeline widget and connect with your key, or check
+   `VEGA APPROVED_ORGS HTTP_STATUS` on the Status screen if you set the
+   secret. `targets/VEGA/procedures/procedure.rb` runs that check from Script
+   Runner (secret path) and then walks the status-screen alerts with injected
+   telemetry.
+3. Reinstall/reconfigure with `vega_org_id` set to the org id you want
+   `WORKSPACE` and `FORECASTING_SUMMARY` to poll. The widget itself can query
+   any org the key has access to, regardless of `vega_org_id`.
+
+To rotate a dashboard key, use "Forget it" in the widget and enter the new
+one. To rotate the secret, change its value in Admin -> Secrets and restart
+`VEGA_INT`. Revoke keys in the Vega app if this COSMOS instance is ever
+decommissioned.
 
 ## Extending
 

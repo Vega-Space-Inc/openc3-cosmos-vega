@@ -1,20 +1,24 @@
 # encoding: ascii-8bit
 
-# Injects the Vega frontend API key into every outgoing HTTP request.
+# Puts the Vega frontend API key on the wire without letting it into any
+# COSMOS log or store.
 #
-# WHY THIS LIVES IN A WRITE PROTOCOL rather than in the command definition:
-# HttpClientInterface builds the request headers from the command packet's
-# HTTP_HEADER_* parameters, and that packet is exactly what the command log,
-# the command CVT, Command Sender and every other tool see. A key baked into a
-# PARAMETER (or supplied as one at send time) is therefore written in plain
-# text to every command log entry. Protocol#write_data runs AFTER the packet
-# has been converted to data/extra and logged, so a header added here reaches
-# the wire but never the log, the packet definition, a setting, or any tool.
+# TWO SOURCES, in priority order:
+#   1. A per-request token in the command's HTTP_HEADER_AUTHORIZATION
+#      parameter. The Timeline widget sends the user's own key this way (it
+#      lives only in that user's browser). The parameter is OBFUSCATE'd, which
+#      masks it in Command Sender and in the text command log.
+#   2. The VEGA_API_KEY environment variable, mounted by `SECRET ENV` in
+#      plugin.txt from Admin / Secrets. Used by the background polls and by any
+#      command sent without a token.
 #
-# The key itself is delivered by `SECRET ENV VEGA_API_KEY VEGA_API_KEY` in
-# plugin.txt, which mounts the Admin / Secrets entry as an environment
-# variable inside the interface container. Nothing in the plugin
-# configuration carries it.
+# WHY THE SCRUB: HttpAccessor stores HTTP_HEADER_* parameters in packet.extra,
+# and after the interface write CommandDecomTopic / CommandTopic serialize
+# packet.extra into the command logs. Packet#obfuscate does not touch DERIVED
+# items or extra, so OBFUSCATE alone would still leak the token there. This
+# protocol runs in write_data, between packet conversion and the HTTP call:
+# it REMOVES the Authorization header from the packet's own extra (what gets
+# logged) and returns a separate copy carrying the token (what gets sent).
 #
 # Usage (plugin.txt, under the INTERFACE):
 #   PROTOCOL WRITE api_key_protocol.rb Authorization VEGA_API_KEY "Bearer "
@@ -26,8 +30,8 @@ require 'openc3/utilities/logger'
 module OpenC3
   class ApiKeyProtocol < Protocol
     # @param header [String] Request header to set
-    # @param env_var [String] Environment variable holding the key (set by SECRET ENV)
-    # @param prefix [String] Prepended to the key, e.g. "Bearer " for RFC 6750 bearer auth
+    # @param env_var [String] Environment variable holding the fallback key (set by SECRET ENV)
+    # @param prefix [String] Prepended to a bare key, e.g. "Bearer " for RFC 6750 bearer auth
     # @param allow_empty_data [true/false/nil] See Protocol#initialize
     def initialize(header = 'Authorization', env_var = 'VEGA_API_KEY', prefix = 'Bearer ', allow_empty_data = nil)
       super(allow_empty_data)
@@ -37,25 +41,33 @@ module OpenC3
       @warned = false
     end
 
-    # Called after the packet has been converted to data / extra (and after the
-    # command was logged), so the key ends up in the request headers only.
-    # Signature and return value match Protocol#write_data: (data, extra).
+    # `extra` here IS packet.extra (convert_packet_to_data passes the same
+    # object), so deleting the header from it scrubs the packet that will be
+    # logged. The token goes out on a copy. Signature and return value match
+    # Protocol#write_data: (data, extra).
     def write_data(data, extra = nil)
-      api_key = ENV[@env_var]
-      if api_key and !api_key.empty?
-        extra ||= {}
-        headers = extra['HTTP_HEADERS']
-        unless headers
-          headers = {}
-          extra['HTTP_HEADERS'] = headers
+      extra ||= {}
+      headers = extra['HTTP_HEADERS'] || {}
+      token = headers.delete(@header) # scrubbed from the logged packet
+      token = nil if token.nil? or token.to_s.strip.empty?
+
+      wire_headers = headers.dup
+      if token
+        token = token.to_s.strip
+        # Accept a bare key as well as a full "Bearer ..." value
+        token = @prefix + token unless @prefix.empty? or token.downcase.start_with?(@prefix.strip.downcase)
+        wire_headers[@header] = token
+      else
+        key = ENV[@env_var]
+        if key and !key.empty?
+          wire_headers[@header] = @prefix + key
+        elsif !@warned
+          # Warn once per instance so the periodic polls don't flood the log
+          @warned = true
+          Logger.warn("No API key for this request and #{@env_var} is not set - enter a key in the Timeline widget, or create the secret in Admin / Secrets and restart VEGA_INT")
         end
-        headers[@header] = @prefix + api_key
-      elsif !@warned
-        # Warn once per instance so the periodic polls don't flood the log
-        @warned = true
-        Logger.warn("#{@env_var} not set - create it in Admin / Secrets and restart VEGA_INT")
       end
-      return super(data, extra)
+      return super(data, extra.merge('HTTP_HEADERS' => wire_headers))
     end
   end
 end

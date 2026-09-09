@@ -27,10 +27,12 @@ TARGET VEGA VEGA
 # HttpClientInterface args: hostname port protocol write_timeout read_timeout connect_timeout
 INTERFACE VEGA_INT http_client_interface.rb <%= vega_hostname %> <%= vega_port %> <%= vega_protocol %> 5.0 <%= vega_read_timeout %> <%= vega_connect_timeout %>
   MAP_TARGET VEGA
-  # The API key never appears in plugin config or the command log: SECRET mounts
-  # the Admin / Secrets entry named VEGA_API_KEY as an environment variable in the
-  # interface container, and the WRITE protocol adds it to the Authorization
-  # header after the command has been logged. See targets/VEGA/lib/api_key_protocol.rb.
+  # Auth: users normally enter their own Vega API key on the dashboard (the
+  # Timeline widget sends it per request, obfuscated). SECRET is the optional
+  # fallback for the background polls: the Admin / Secrets entry VEGA_API_KEY is
+  # mounted as an environment variable and the WRITE protocol puts whichever key
+  # applies on the wire, after scrubbing it from the logged packet.
+  # See targets/VEGA/lib/api_key_protocol.rb.
   PROTOCOL WRITE api_key_protocol.rb Authorization VEGA_API_KEY "Bearer "
   SECRET ENV VEGA_API_KEY VEGA_API_KEY
   # CONNECT_CMD populates the CVT as soon as the interface connects;
