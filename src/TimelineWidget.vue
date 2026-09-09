@@ -294,9 +294,8 @@
         </div>
       </div>
 
-      <!-- Toolbar: the window's date, centred over the chart, with Today /
-           Reset zoom beside it. The previous/next-day arrows flank the
-           chart itself (see .lanes-nav below). -->
+      <!-- Toolbar, centred over the chart: previous/next-day arrows, the
+           window's date, then Today / Reset zoom when relevant. -->
       <div class="legend-key">
         <button
           v-if="tlmItem"
@@ -326,6 +325,32 @@
           Reset zoom ({{ zoomSpanLabel }})
         </button>
         <div class="window-nav">
+          <v-tooltip location="top" text="Previous day">
+            <template #activator="{ props }">
+              <button
+                type="button"
+                class="window-nav-btn"
+                :disabled="loading || windowOffsetDays <= -MAX_BACK_DAYS"
+                v-bind="props"
+                @click="shiftWindow(-1)"
+              >
+                <v-icon size="18">mdi-chevron-left</v-icon>
+              </button>
+            </template>
+          </v-tooltip>
+          <v-tooltip location="top" text="Next day">
+            <template #activator="{ props }">
+              <button
+                type="button"
+                class="window-nav-btn"
+                :disabled="loading || windowOffsetDays >= MAX_FORWARD_OFFSET"
+                v-bind="props"
+                @click="shiftWindow(1)"
+              >
+                <v-icon size="18">mdi-chevron-right</v-icon>
+              </button>
+            </template>
+          </v-tooltip>
           <span class="window-nav-date">
             <template v-if="days.length === 1">
               {{ days[0].weekday }} {{ days[0].display }}
@@ -354,21 +379,6 @@
            numberless; clicking one expands it with that band's tick values. -->
       <div v-if="days.length && bands.length" class="lanes-wrap">
         <div class="lanes-body" @mouseleave="hoverBand = null">
-          <div class="lanes-nav">
-            <v-tooltip location="top" text="Previous day">
-              <template #activator="{ props }">
-                <button
-                  type="button"
-                  class="window-nav-btn"
-                  :disabled="loading || windowOffsetDays <= -MAX_BACK_DAYS"
-                  v-bind="props"
-                  @click="shiftWindow(-1)"
-                >
-                  <v-icon size="18">mdi-chevron-left</v-icon>
-                </button>
-              </template>
-            </v-tooltip>
-          </div>
           <div class="lanes-ytitle"><span>ASI Risk</span></div>
           <div class="lanes-labels">
             <div
@@ -550,21 +560,6 @@
               </div>
             </div>
           </div>
-          <div class="lanes-nav">
-            <v-tooltip location="top" text="Next day">
-              <template #activator="{ props }">
-                <button
-                  type="button"
-                  class="window-nav-btn"
-                  :disabled="loading || windowOffsetDays >= MAX_FORWARD_OFFSET"
-                  v-bind="props"
-                  @click="shiftWindow(1)"
-                >
-                  <v-icon size="18">mdi-chevron-right</v-icon>
-                </button>
-              </template>
-            </v-tooltip>
-          </div>
         </div>
 
         <div class="x-axis-row">
@@ -582,7 +577,6 @@
               {{ days[0].weekday }} {{ days[0].display }}
             </span>
           </div>
-          <div class="x-axis-spacer-right" />
         </div>
         <!-- Ramp legend: slice colour (and height) is the interferer count
              relative to that band's own peak across the loaded days. -->
@@ -3016,11 +3010,7 @@ export default {
   height: 34px;
 }
 .x-axis-spacer {
-  width: 114px; /* .lanes-nav + .lanes-ytitle + .lanes-labels */
-  flex: none;
-}
-.x-axis-spacer-right {
-  width: 30px; /* .lanes-nav */
+  width: 84px; /* .lanes-ytitle + .lanes-labels */
   flex: none;
 }
 .x-axis-row .x-axis {
@@ -3033,14 +3023,6 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-/* Previous/next-day arrows, one column on each side of the lanes */
-.lanes-nav {
-  width: 30px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 .window-nav-btn {
   display: flex;
