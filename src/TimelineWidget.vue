@@ -227,17 +227,6 @@
             </v-list>
           </v-menu>
         </div>
-        <!-- Own line, sized to the widget rather than the widget to it, so
-             a loading message or a long error never changes the width -->
-        <div class="status-line">
-          <span v-if="workspaceLoading" class="progress-text"
-            >Loading workspace…</span
-          >
-          <span v-else-if="loading" class="progress-text">{{
-            progressText
-          }}</span>
-          <span v-if="errorText" class="error-text">{{ errorText }}</span>
-        </div>
 
         <span v-if="TLM_OVERLAY_ENABLED" class="select-label"
           >SATELLITE TELEMETRY OVERLAY (COSMOS)</span
@@ -330,6 +319,19 @@
           </v-list>
         </v-menu>
         <div class="window-nav-right">
+          <!-- Loading / error text lives here: the box can shrink (min-width
+               0, ellipsis) so a long message never widens the widget or
+               adds a line -->
+          <span
+            v-if="workspaceLoading || loading || errorText"
+            class="status-text"
+            :class="{ 'error-text': !!errorText && !loading }"
+            :title="errorText || progressText"
+          >
+            <template v-if="workspaceLoading">Loading workspace…</template>
+            <template v-else-if="loading">{{ progressText }}</template>
+            <template v-else>{{ errorText }}</template>
+          </span>
           <button
             v-if="zoomRange"
             type="button"
@@ -2925,7 +2927,7 @@ export default {
 .timeline-widget {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 8px;
   min-width: 700px;
   color: var(--v-theme-on-surface, inherit);
@@ -2934,7 +2936,7 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: 8px;
 }
 .controls-row {
   display: flex;
@@ -2947,16 +2949,13 @@ export default {
   opacity: 0.6;
   white-space: nowrap;
 }
-.status-line {
-  /* Takes the widget's width without contributing to it, and reserves one
-     line so appearing/disappearing text doesn't shift the chart */
-  width: 0;
-  min-width: 100%;
-  min-height: 16px;
-  white-space: normal;
-  overflow-wrap: anywhere;
+.status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
-  line-height: 16px;
+  opacity: 0.7;
 }
 .progress-text {
   font-size: 12px;
@@ -3396,12 +3395,14 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
 }
 .window-nav-right {
   margin-left: auto;
+  min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 .quick-days {
