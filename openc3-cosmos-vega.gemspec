@@ -21,7 +21,7 @@ Gem::Specification.new do |s|
     time = Time.now.strftime("%Y%m%d%H%M%S")
     s.version = '0.0.0' + ".#{time}"
   end
-  s.files = Dir.glob("{targets,lib,public,tools,microservices}/**/*").reject { |f| f.end_with?(".map") } + %w(Rakefile README.md LICENSE.md plugin.txt)
+  s.files = Dir.glob("{targets,lib,public,tools,microservices}/**/*") + %w(Rakefile README.md LICENSE.md plugin.txt) # the widget .map must ship: WidgetModel copies it at install
 
   s.metadata = {
     # These fields are used when you submit your plugin to the OpenC3 Store at store.openc3.com

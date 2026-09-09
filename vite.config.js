@@ -11,9 +11,10 @@ export default defineConfig({
   build: {
     outDir: 'tools/widgets/TimelineWidget',
     emptyOutDir: true,
-    // Off by default: the 4 MB .map was being shipped inside the gem. Build
-    // with SOURCEMAP=true when you want the bundle-composition report.
-    sourcemap: process.env.SOURCEMAP === 'true',
+    // COSMOS's WidgetModel copies <widget>.umd.min.js.map alongside the js
+    // unconditionally at install, so the map must ship. It is small now that
+    // @openc3/vue-common is no longer bundled (was 4 MB for a 1.5 MB bundle).
+    sourcemap: true,
     lib: {
       entry: './src/TimelineWidget.vue',
       name: 'TimelineWidget',
