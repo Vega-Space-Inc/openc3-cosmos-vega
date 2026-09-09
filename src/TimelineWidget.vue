@@ -364,6 +364,23 @@
            its shape), on the green -> amber -> red ramp. Collapsed lanes are
            numberless; clicking one expands it with that band's tick values. -->
       <div v-if="days.length && bands.length" class="lanes-wrap">
+        <!-- Current time, sitting above the grid on the "now" line -->
+        <div class="now-row">
+          <div class="x-axis-spacer" />
+          <div class="now-track">
+            <span
+              v-if="
+                nowMarkerC !== null &&
+                nowMarkerC > viewStart &&
+                nowMarkerC < viewEnd
+              "
+              class="now-time"
+              :style="{ left: cToPct(nowMarkerC) + '%' }"
+            >
+              {{ nowLabel }}
+            </span>
+          </div>
+        </div>
         <div class="lanes-body" @mouseleave="hoverBand = null">
           <div class="lanes-labels">
             <div
@@ -520,9 +537,7 @@
               "
               class="now-line"
               :style="{ left: cToPct(nowMarkerC) + '%' }"
-            >
-              <span class="now-label">now</span>
-            </div>
+            />
             <div
               v-if="dragSelectionStyle"
               class="drag-selection"
@@ -901,6 +916,8 @@ export default {
       RAMP_COLORS,
       // COSMOS 'time_zone' setting - see the Time zone block up top.
       timeZone: 'local',
+      // Wall clock, ticked every 30s so the "now" line and its label move.
+      nowMs: Date.now(),
       // CSS px width of the lanes area, kept current by a ResizeObserver;
       // drives how many minutes each slice covers (see slotMinutes).
       laneWidthPx: 0,
@@ -1173,7 +1190,10 @@ export default {
     // Recomputed on render passes, not a live clock; close enough for a
     // marker on a multi-day chart.
     nowIdx() {
-      return (Date.now() - this.day0StartMs) / 60000
+      return (this.nowMs - this.day0StartMs) / 60000
+    },
+    nowLabel() {
+      return this.formatHM(new Date(this.nowMs))
     },
     totalMinutes() {
       return this.days.length * 1440
@@ -1698,6 +1718,9 @@ export default {
     this._forecastGen = 0
     // Per-(satellite, station, day) response cache - see loadForecast.
     this._dayCache = {}
+    this._clockTimer = setInterval(() => {
+      this.nowMs = Date.now()
+    }, 30000)
     // Same setting the top-bar clock reads, so the chart and the clock agree.
     try {
       const tz = await this.api.get_setting('time_zone')
@@ -1719,6 +1742,7 @@ export default {
     this.observeLaneWidth()
   },
   beforeUnmount() {
+    clearInterval(this._clockTimer)
     if (this._laneResizeObserver) {
       this._laneResizeObserver.disconnect()
       this._laneResizeObserver = null
@@ -2944,7 +2968,9 @@ export default {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  margin-top: 2px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
   font-size: 11px;
   opacity: 0.8;
   white-space: nowrap;
@@ -3423,14 +3449,23 @@ export default {
   border-left: 1px dashed rgba(255, 255, 255, 0.35);
   pointer-events: none;
 }
-.now-label {
+.now-row {
+  display: flex;
+  height: 16px;
+}
+.now-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.now-time {
   position: absolute;
-  top: 2px;
-  left: 3px;
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.5;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+  white-space: nowrap;
 }
 .hover-tooltip {
   position: absolute;
