@@ -590,15 +590,18 @@ const MAX_BACK_DAYS = 30
 // --- Pass-compressed x axis ---
 // LEO passes are minutes long with hours of nothing between them; on a
 // clock axis the chart is mostly empty zero-line. Instead the x axis shows
-// ONLY the passes, laid end to end with a small fixed-width gap (and a
-// vertical separator) between them, each labeled underneath with its time
-// range. Chart x coordinates are "compressed units": 1 unit = 1 minute
-// inside a pass, gaps are PASS_GAP_UNITS wide. A satellite that is always
-// visible (GEO) yields a single day-long pass and keeps normal clock ticks.
-const PASS_GAP_UNITS = 12
-// Context minutes added on each side of a pass so lines rise from/return to
-// the baseline instead of starting mid-spike.
-const PASS_PAD_MIN = 2
+// ONLY the passes, laid end to end with a vertical separator between them,
+// each labeled underneath with its time range. Chart x coordinates are
+// "compressed units": 1 unit = 1 minute inside a pass; passes butt up
+// against each other (PASS_GAP_UNITS = 0) so the slices fill each box edge
+// to edge and the separator alone marks the boundary. A satellite that is
+// always visible (GEO) yields a single day-long pass and keeps normal
+// clock ticks.
+const PASS_GAP_UNITS = 0
+// Context minutes on each side of a pass. Zero: slices (unlike the old
+// lines) don't need to rise from a baseline, and any padding is dead space
+// inside the box.
+const PASS_PAD_MIN = 0
 
 // Today/forecast day responses go stale (the forecast refreshes, and
 // today's measured portion keeps growing); past days never do.
@@ -1859,7 +1862,10 @@ export default {
     buildBandBars(band) {
       const entries = this.minuteEntries
       const slot = this.slotMinutes
-      const w = (slot * SLICE_FILL).toFixed(2)
+      // Each slice sits centred in its slot, so the gap is split evenly on
+      // both sides and the first/last slices keep the same margin from the
+      // box edges as from each other.
+      const inset = (slot * (1 - SLICE_FILL)) / 2
       const d = new Array(RAMP_STEPS).fill('')
       for (const seg of this.segments) {
         for (let idx = seg.startIdx; idx < seg.endIdx; idx += slot) {
@@ -1875,7 +1881,11 @@ export default {
           const level = this.levelOf(count, band)
           const step = Math.round(level * (RAMP_STEPS - 1))
           const h = level * CHART_H
-          const x = seg.cstart + (idx - seg.startIdx)
+          // A short final slot (pass length not a multiple of slot) gets a
+          // proportionally narrower slice, never one that spills past the
+          // pass boundary into the next box.
+          const w = ((stop - idx) * SLICE_FILL).toFixed(2)
+          const x = (seg.cstart + (idx - seg.startIdx) + inset).toFixed(2)
           // M x,top  h w  V baseline  h -w  Z : one slice, w minutes wide
           d[step] += `M${x},${(CHART_H - h).toFixed(1)}h${w}V${CHART_H}h-${w}Z`
         }
