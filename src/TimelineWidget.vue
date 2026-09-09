@@ -305,17 +305,6 @@
         >
           {{ band }}
         </button>
-        <!-- Ramp legend: slice colour (and height) is the interferer count
-             relative to that band's own peak across the loaded days. -->
-        <div
-          v-if="hasLoadedData"
-          class="severity-key"
-          title="Slice colour and height = interferer count relative to that band's peak in the loaded window"
-        >
-          <span class="severity-key-item">Low interference</span>
-          <span class="ramp-swatch" :style="{ background: rampCss }" />
-          <span class="severity-key-item">High interference</span>
-        </div>
         <button
           v-if="tlmItem"
           type="button"
@@ -398,6 +387,7 @@
            numberless; clicking one expands it with that band's tick values. -->
       <div v-if="days.length && bands.length" class="lanes-wrap">
         <div class="lanes-body" @mouseleave="hoverBand = null">
+          <div class="lanes-ytitle"><span>ASI Risk</span></div>
           <div class="lanes-labels">
             <div
               v-for="band in visibleBandList"
@@ -577,6 +567,16 @@
               {{ days[0].weekday }} {{ days[0].display }}
             </span>
           </div>
+        </div>
+        <!-- Ramp legend: slice colour (and height) is the interferer count
+             relative to that band's own peak across the loaded days. -->
+        <div
+          class="ramp-legend"
+          title="Slice colour and height = interferer count relative to that band's peak in the loaded window"
+        >
+          <span>Low ASI Risk</span>
+          <span class="ramp-swatch" :style="{ background: rampCss }" />
+          <span>High ASI Risk</span>
         </div>
       </div>
     </template>
@@ -2651,18 +2651,14 @@ export default {
   display: block;
   overflow: visible;
 }
-.severity-key {
+.ramp-legend {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
-  margin-left: 6px;
+  margin-top: 2px;
   font-size: 11px;
   opacity: 0.8;
-}
-.severity-key-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
   white-space: nowrap;
 }
 .tone-swatch {
@@ -2871,6 +2867,22 @@ export default {
 .lanes-body {
   display: flex;
 }
+.lanes-ytitle {
+  width: 20px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lanes-ytitle span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  white-space: nowrap;
+}
 .lanes-labels {
   width: 64px;
   flex: none;
@@ -2961,7 +2973,7 @@ export default {
   height: 34px;
 }
 .x-axis-spacer {
-  width: 64px;
+  width: 84px; /* .lanes-ytitle + .lanes-labels */
   flex: none;
 }
 .x-axis-row .x-axis {
