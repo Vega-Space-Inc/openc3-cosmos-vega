@@ -332,14 +332,14 @@
             <template v-else-if="loading">{{ progressText }}</template>
             <template v-else>{{ errorText }}</template>
           </span>
-          <button
+          <v-btn
             v-if="zoomRange"
-            type="button"
-            class="reset-zoom-btn"
+            variant="outlined"
+            style="height: 40px"
             @click="resetZoom"
           >
             Reset zoom ({{ zoomSpanLabel }})
-          </button>
+          </v-btn>
           <button
             v-if="tlmItem"
             type="button"
@@ -3213,16 +3213,6 @@ export default {
   font-size: 11px;
   cursor: pointer;
 }
-.reset-zoom-btn {
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(79, 195, 247, 0.5);
-  background: transparent;
-  color: #4fc3f7;
-  font-size: 12px;
-  cursor: pointer;
-  margin-left: 4px;
-}
 
 // Chart: y-axis labels | plot area (gridlines + svg lines), x-axis below
 .chart-wrap {
@@ -3339,6 +3329,7 @@ export default {
 .lanes-wrap {
   display: flex;
   flex-direction: column;
+  margin-top: 10px;
 }
 .lanes-body {
   display: flex;
@@ -3488,6 +3479,7 @@ export default {
 .x-axis-row {
   display: flex;
   height: 16px;
+  margin-top: 8px;
 }
 .pass-row {
   display: flex;
