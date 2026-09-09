@@ -453,12 +453,25 @@
                      rising from the baseline with a gap between neighbours.
                      The viewBox does the horizontal scaling on zoom. -->
                 <g :opacity="hoverBand && hoverBand !== band ? 0.3 : 1">
+                  <g :opacity="hoverSlices && hoverBand === band ? 0.35 : 1">
+                    <path
+                      v-for="(d, step) in bandBars[band]"
+                      :key="step"
+                      :d="d"
+                      :fill="RAMP_COLORS[step]"
+                      stroke="none"
+                    />
+                  </g>
+                  <!-- The hovered slice, redrawn at full strength over the
+                       dimmed lane so it is unmistakable which bar the
+                       tooltip describes. -->
                   <path
-                    v-for="(d, step) in bandBars[band]"
-                    :key="step"
-                    :d="d"
-                    :fill="RAMP_COLORS[step]"
-                    stroke="none"
+                    v-if="hoverSlices && hoverBand === band && hoverSlices[band]"
+                    :d="hoverSlices[band].d"
+                    :fill="hoverSlices[band].color"
+                    stroke="rgba(255, 255, 255, 0.9)"
+                    stroke-width="1"
+                    vector-effect="non-scaling-stroke"
                   />
                 </g>
               </svg>
@@ -492,15 +505,15 @@
               :style="dragSelectionStyle"
             />
             <div
-              v-if="hoverIdx !== null && hasLoadedData"
+              v-if="hoverSlot && hasLoadedData"
               class="hover-line"
-              :style="{ left: idxToPct(hoverIdx) + '%' }"
+              :style="{ left: cToPct(hoverSlot.cx) + '%' }"
             />
             <div
               v-if="hoverInfo"
               class="hover-tooltip"
               :class="{ flip: hoverTooltipFlipped }"
-              :style="{ left: idxToPct(hoverIdx) + '%' }"
+              :style="{ left: cToPct(hoverSlot.cx) + '%' }"
             >
               <div class="hover-tooltip-time">{{ hoverInfo.label }}</div>
               <div v-if="!hoverInfo.covered" class="hover-tooltip-nocoverage">
@@ -1203,6 +1216,33 @@ export default {
     rampCss() {
       return `linear-gradient(90deg, ${RAMP_COLORS.join(', ')})`
     },
+    // The slice slot under the cursor: its minute range [start, stop) and
+    // the compressed x of its centre (for the crosshair and tooltip).
+    hoverSlot() {
+      const idx = this.hoverIdx
+      if (idx === null) return null
+      const seg = this.segments.find(
+        (s) => idx >= s.startIdx && idx < s.endIdx,
+      )
+      if (!seg) return null
+      const slot = this.slotMinutes
+      const start =
+        seg.startIdx + Math.floor((idx - seg.startIdx) / slot) * slot
+      const stop = Math.min(seg.endIdx, start + slot)
+      const c0 = seg.cstart + (start - seg.startIdx)
+      return { seg, start, stop, cx: c0 + (stop - start) / 2 }
+    },
+    // The hovered slice per band, ready to redraw on top of the dimmed lane.
+    hoverSlices() {
+      const slot = this.hoverSlot
+      if (!slot) return null
+      const result = {}
+      for (const band of this.bands) {
+        const g = this.sliceGeom(band, slot.seg, slot.start, slot.stop)
+        if (g) result[band] = { d: g.d, color: rampColor(g.level) }
+      }
+      return result
+    },
     dragSelectionStyle() {
       if (this.dragStartPx === null) return null
       const left = Math.min(this.dragStartPx, this.dragCurrentPx)
@@ -1215,33 +1255,28 @@ export default {
     // Flip the tooltip to the left of the cursor once it's past the
     // midpoint of the current view, so it doesn't run off the right edge.
     hoverTooltipFlipped() {
-      return this.hoverIdx !== null && this.idxToPct(this.hoverIdx) > 55
+      return !!this.hoverSlot && this.cToPct(this.hoverSlot.cx) > 55
     },
     // The per-band interaction counts at the hovered minute, for the
     // currently-visible bands. null if not hovering, no data loaded yet, or
     // the hovered minute falls in a day that hasn't loaded.
     hoverInfo() {
-      if (this.hoverIdx === null) return null
+      const slot = this.hoverSlot
+      if (!slot) return null
       const dayIdx = Math.floor(this.hoverIdx / 1440)
       const day = this.days[dayIdx]
       if (!day) return null
-      const dayData = this.dayDataByDate[day.date]
-      if (!dayData) return null
-      const minuteOfDay = this.hoverIdx - dayIdx * 1440
-      const entry = (dayData.minutes || []).find(
-        (m) =>
-          Math.round(this.minutesInDay(m.timestamp, day.date)) === minuteOfDay,
-      )
+      if (!this.dayDataByDate[day.date]) return null
+      const entry = this.minuteEntries[this.hoverIdx]
       if (!entry) return null
       // With per-band lanes, the tooltip shows only the hovered lane's band
       // (falling back to all visible bands when no lane is under the cursor).
+      // Counts are the slot's worst minute - the same number the bar shows.
       const rows = this.bands
         .filter((b) => this.visibleBands[b])
         .filter((b) => !this.hoverBand || b === this.hoverBand)
         .map((b) => {
-          const count = entry.covered
-            ? (entry.counts && entry.counts[b]) || 0
-            : 0
+          const count = this.slotCount(b, slot.start, slot.stop)
           const level = this.levelOf(count, b)
           return {
             band: b,
@@ -1255,8 +1290,13 @@ export default {
                   : '',
           }
         })
+      const from = this.formatHM(this.idxToDate(slot.start))
+      const to =
+        slot.stop - slot.start > 1
+          ? `–${this.formatHM(this.idxToDate(slot.stop - 1))}`
+          : ''
       return {
-        label: `${day.weekday} ${day.display} ${this.formatHM(this.idxToDate(this.hoverIdx))}`,
+        label: `${day.weekday} ${day.display} ${from}${to}`,
         covered: entry.covered,
         rows,
       }
@@ -1805,7 +1845,9 @@ export default {
     cToIdx(c) {
       for (const seg of this.segments) {
         if (c >= seg.cstart && c < seg.cstart + seg.clen) {
-          return seg.startIdx + Math.round(c - seg.cstart)
+          // floor: the slice for minute N spans [N, N+1), so the cursor is
+          // over slice N until it crosses into N+1's slot.
+          return seg.startIdx + Math.floor(c - seg.cstart)
         }
       }
       return null
@@ -1860,37 +1902,50 @@ export default {
     // that isn't covered, or has zero interference, draws nothing: on the
     // pass-compressed axis "no slice" already reads as "clean".
     buildBandBars(band) {
-      const entries = this.minuteEntries
       const slot = this.slotMinutes
-      // Each slice sits centred in its slot, so the gap is split evenly on
-      // both sides and the first/last slices keep the same margin from the
-      // box edges as from each other.
-      const inset = (slot * (1 - SLICE_FILL)) / 2
       const d = new Array(RAMP_STEPS).fill('')
       for (const seg of this.segments) {
         for (let idx = seg.startIdx; idx < seg.endIdx; idx += slot) {
-          let count = 0
           const stop = Math.min(seg.endIdx, idx + slot)
-          for (let j = idx; j < stop; j++) {
-            const entry = entries[j]
-            if (!entry || !entry.covered) continue
-            const c = (entry.counts && entry.counts[band]) || 0
-            if (c > count) count = c
-          }
-          if (!(count > 0)) continue
-          const level = this.levelOf(count, band)
-          const step = Math.round(level * (RAMP_STEPS - 1))
-          const h = level * CHART_H
-          // A short final slot (pass length not a multiple of slot) gets a
-          // proportionally narrower slice, never one that spills past the
-          // pass boundary into the next box.
-          const w = ((stop - idx) * SLICE_FILL).toFixed(2)
-          const x = (seg.cstart + (idx - seg.startIdx) + inset).toFixed(2)
-          // M x,top  h w  V baseline  h -w  Z : one slice, w minutes wide
-          d[step] += `M${x},${(CHART_H - h).toFixed(1)}h${w}V${CHART_H}h-${w}Z`
+          const g = this.sliceGeom(band, seg, idx, stop)
+          if (g) d[g.step] += g.d
         }
       }
       return d
+    },
+    // Worst per-band count across the minutes [start, stop) - what a slot
+    // shows, so grouping never hides a spike.
+    slotCount(band, start, stop) {
+      const entries = this.minuteEntries
+      let count = 0
+      for (let j = start; j < stop; j++) {
+        const entry = entries[j]
+        if (!entry || !entry.covered) continue
+        const c = (entry.counts && entry.counts[band]) || 0
+        if (c > count) count = c
+      }
+      return count
+    },
+    // Geometry of one slot's slice for a band: the path fragment, its ramp
+    // step and level. null when there is nothing to draw. Each slice sits
+    // centred in its slot, so the gap is split evenly on both sides and the
+    // first/last slices keep the same margin from the box edges as from each
+    // other; a short final slot (pass length not a multiple of slot) gets a
+    // proportionally narrower slice, never one that spills past the pass
+    // boundary into the next box.
+    sliceGeom(band, seg, start, stop) {
+      const count = this.slotCount(band, start, stop)
+      if (!(count > 0)) return null
+      const level = this.levelOf(count, band)
+      const step = Math.round(level * (RAMP_STEPS - 1))
+      const h = level * CHART_H
+      const span = stop - start
+      const inset = (span * (1 - SLICE_FILL)) / 2
+      const w = (span * SLICE_FILL).toFixed(2)
+      const x = (seg.cstart + (start - seg.startIdx) + inset).toFixed(2)
+      // M x,top  h w  V baseline  h -w  Z : one slice, w minutes wide
+      const d = `M${x},${(CHART_H - h).toFixed(1)}h${w}V${CHART_H}h-${w}Z`
+      return { d, step, level, count }
     },
     // Click-drag on the chart to zoom into a narrower time window. The
     // underlying path data (in absolute minute coordinates) never changes -
