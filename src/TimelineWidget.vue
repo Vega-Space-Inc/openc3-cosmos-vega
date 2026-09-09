@@ -1552,7 +1552,11 @@ export default {
             return
           }
         }
-        this.setIntegrationState('unavailable')
+        // No response either way. With no key in this browser, the
+        // interface protocol drops authenticated requests outright (it has
+        // nothing to sign them with unless the VEGA_API_KEY secret exists),
+        // so silence means "no key", not "Vega is down".
+        this.setIntegrationState(this.savedApiKey ? 'unavailable' : 'missing_key')
       } catch (e) {
         this.setIntegrationState('unavailable')
         this.integrationCheckError = `Could not check the Vega connection: ${e.message}`

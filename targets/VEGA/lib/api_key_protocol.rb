@@ -12,6 +12,13 @@
 #      plugin.txt from Admin / Secrets. Used by the background polls and by any
 #      command sent without a token.
 #
+# NO KEY AT ALL: an authenticated request is DROPPED (:STOP) rather than
+# sent. Without the secret, the background PERIODIC_CMD polls have nothing to
+# authenticate with; sending them anyway just buys a 401 every period, which
+# lands in ERROR_RESPONSE and trips its RED limit - a stream of alarms about
+# a request that could never have succeeded. The one unauthenticated path
+# (the health check) still goes out. A warning is logged once.
+#
 # WHY THE SCRUB: HttpAccessor stores HTTP_HEADER_* parameters in packet.extra,
 # and after the interface write CommandDecomTopic / CommandTopic serialize
 # packet.extra into the command logs. Packet#obfuscate does not touch DERIVED
@@ -41,6 +48,15 @@ module OpenC3
       @warned = false
     end
 
+    # Paths that need no key and are always sent.
+    PUBLIC_PATH_SUFFIXES = ['/health'].freeze
+
+    def public_request?(extra)
+      uri = extra['HTTP_URI'].to_s
+      path = uri.split('?', 2).first.to_s
+      PUBLIC_PATH_SUFFIXES.any? { |suffix| path.end_with?(suffix) }
+    end
+
     # `extra` here IS packet.extra (convert_packet_to_data passes the same
     # object), so deleting the header from it scrubs the packet that will be
     # logged. The token goes out on a copy. Signature and return value match
@@ -61,10 +77,13 @@ module OpenC3
         key = ENV[@env_var]
         if key and !key.empty?
           wire_headers[@header] = @prefix + key
-        elsif !@warned
-          # Warn once per instance so the periodic polls don't flood the log
-          @warned = true
-          Logger.warn("No API key for this request and #{@env_var} is not set - enter a key in the Timeline widget, or create the secret in Admin / Secrets and restart VEGA_INT")
+        elsif !public_request?(extra)
+          unless @warned
+            # Warn once per instance so the periodic polls don't flood the log
+            @warned = true
+            Logger.warn("No API key and #{@env_var} is not set - authenticated requests are dropped until a key is entered in the Timeline widget or the secret is created in Admin / Secrets (then restart VEGA_INT)")
+          end
+          return :STOP
         end
       end
       return super(data, extra.merge('HTTP_HEADERS' => wire_headers))
