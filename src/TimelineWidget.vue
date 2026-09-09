@@ -4,12 +4,13 @@
 # User picks a satellite AND a ground station. One chart, continuous x axis
 # (72 hours by default, click-drag to zoom into a narrower window),
 # quantitative y axis ("Interference" = per-minute interferer count). Each
-# frequency band gets its own lane of bottom-aligned per-minute bars: bar
-# height is the count (scaled to that band's own peak) and bar colour is the
-# severity tone Vega itself assigns to the minute (normal / warning / high,
-# from the tone_thresholds the API returns with each day), so the chart reads
-# like the Vega app's own timeline. Bands are toggled on/off via the chip row,
-# and the severity key beside it shows the thresholds in force. A minute
+# frequency band gets its own lane of bottom-aligned slices, one per minute
+# (or per few minutes when the lane is too narrow to show 1,440 distinct
+# bars): slice height AND colour are the interferer count relative to that
+# band's own peak, on a continuous green -> amber -> red ramp, so the chart
+# reads like the Vega app's own timeline strip. Bands are toggled on/off via
+# the chip row, and the ramp legend beside it says what the colours mean. A
+# minute
 # where the satellite isn't covered/visible from the ground station is
 # plotted as zero interactions (not a gap). If the target has no
 # working Vega connection yet, an onboarding state lets the user paste their
@@ -304,21 +305,16 @@
         >
           {{ band }}
         </button>
-        <!-- Severity key: the bar colours, with the thresholds actually in
-             force for the loaded days (they come from the API per day). -->
+        <!-- Ramp legend: slice colour (and height) is the interferer count
+             relative to that band's own peak across the loaded days. -->
         <div
-          v-if="severityKey"
+          v-if="hasLoadedData"
           class="severity-key"
-          title="Bar colour = severity tone Vega assigns to each minute, from its per-band interference count"
+          title="Slice colour and height = interferer count relative to that band's peak in the loaded window"
         >
-          <span
-            v-for="tone in severityKey"
-            :key="tone.tone"
-            class="severity-key-item"
-          >
-            <span class="tone-swatch" :style="{ background: tone.color }" />
-            {{ tone.label }}
-          </span>
+          <span class="severity-key-item">Low interference</span>
+          <span class="ramp-swatch" :style="{ background: rampCss }" />
+          <span class="severity-key-item">High interference</span>
         </div>
         <button
           v-if="tlmItem"
@@ -396,10 +392,9 @@
 
       <!-- Per-band lanes: operators care whether THEIR band is clear, not
            how bands compare, so each band gets its own row. Each lane is a
-           run of bottom-aligned per-minute bars: height is the interferer
+           run of bottom-aligned slices: height AND colour are the interferer
            count scaled to that band's own peak (so a quiet band still shows
-           its shape), colour is the severity tone Vega assigns to that minute
-           (absolute, from the API's tone thresholds). Collapsed lanes are
+           its shape), on the green -> amber -> red ramp. Collapsed lanes are
            numberless; clicking one expands it with that band's tick values. -->
       <div v-if="days.length && bands.length" class="lanes-wrap">
         <div class="lanes-body" @mouseleave="hoverBand = null">
@@ -454,18 +449,16 @@
                 :viewBox="`${viewStart} 0 ${viewEnd - viewStart} ${CHART_H}`"
                 preserveAspectRatio="none"
               >
-                <!-- One path per severity tone, each a run of 1-minute-wide
-                     rects rising from the baseline. The viewBox does the
-                     horizontal scaling on zoom; crispEdges stops hairline
-                     seams between adjacent bars. -->
+                <!-- One path per ramp step, each a run of narrow rects
+                     rising from the baseline with a gap between neighbours.
+                     The viewBox does the horizontal scaling on zoom. -->
                 <g :opacity="hoverBand && hoverBand !== band ? 0.3 : 1">
                   <path
-                    v-for="tone in TONES"
-                    :key="tone"
-                    :d="bandBars[band][tone]"
-                    :fill="TONE_COLORS[tone]"
+                    v-for="(d, step) in bandBars[band]"
+                    :key="step"
+                    :d="d"
+                    :fill="RAMP_COLORS[step]"
                     stroke="none"
-                    shape-rendering="crispEdges"
                   />
                 </g>
               </svg>
@@ -630,23 +623,40 @@ const MONTHS = [
 // viewStart..viewEnd, in minutes - zooming just narrows this window, it
 // never touches the underlying path data.
 const CHART_H = 220
-// Severity tones. Each per-minute bar is coloured by the tone Vega assigns
-// to that minute for that band, using the tone_thresholds the API returns
-// with every day (warning_min / high_min = per-band count at or above which
-// a minute is 'warning' / 'high'). Same green / amber / red ramp as the Vega
-// app's own timeline, so the two read identically. Severity is also encoded
-// by bar height and spelled out in the tooltip, so hue is never the only cue.
-const TONES = ['normal', 'warning', 'high']
-const TONE_COLORS = {
-  normal: '#43a047',
-  warning: '#ffb300',
-  high: '#e53935',
+// Colour ramp. Each slice is coloured by its interferer count RELATIVE to
+// the band's own peak in the loaded window - green (quiet) through amber to
+// red (the band's worst minute) - the same continuous low -> high strip the
+// Vega app draws. Relative, not the API's absolute tone thresholds: with
+// real traffic every minute clears "high >= 10", which paints the whole day
+// one colour and says nothing. The ramp is quantised to RAMP_STEPS colours
+// so a lane is at most RAMP_STEPS <path> elements no matter how many
+// minutes it holds. Level is also encoded by slice height and spelled out
+// in the tooltip, so hue is never the only cue.
+const RAMP_STEPS = 16
+const RAMP_STOPS = [
+  [0x43, 0xa0, 0x47], // green
+  [0xff, 0xb3, 0x00], // amber
+  [0xe5, 0x39, 0x35], // red
+]
+function rampColor(level) {
+  const t = Math.min(1, Math.max(0, level)) * (RAMP_STOPS.length - 1)
+  const i = Math.min(RAMP_STOPS.length - 2, Math.floor(t))
+  const f = t - i
+  const rgb = RAMP_STOPS[i].map((a, k) =>
+    Math.round(a + (RAMP_STOPS[i + 1][k] - a) * f),
+  )
+  return `rgb(${rgb.join(',')})`
 }
-const TONE_LABELS = {
-  normal: 'Normal',
-  warning: 'Warning',
-  high: 'High',
-}
+const RAMP_COLORS = Array.from({ length: RAMP_STEPS }, (_, i) =>
+  rampColor(i / (RAMP_STEPS - 1)),
+)
+// Fraction of each slot a slice fills; the rest is the gap that makes
+// neighbouring slices read as separate bars rather than a filled area.
+const SLICE_FILL = 0.7
+// Minimum on-screen width of one slot (slice + gap), in CSS px. When a
+// lane can't give every minute that much room, minutes are grouped into
+// slots of 2, 3, ... minutes (worst minute wins) so the slices stay visible.
+const MIN_SLOT_PX = 4
 
 // CVT poll cadence while waiting for a command's HTTP response to land, and
 // how long "check again" waits for APPROVED_ORGS to refresh before it
@@ -771,8 +781,10 @@ export default {
   data() {
     return {
       CHART_H,
-      TONES,
-      TONE_COLORS,
+      RAMP_COLORS,
+      // CSS px width of the lanes area, kept current by a ResizeObserver;
+      // drives how many minutes each slice covers (see slotMinutes).
+      laneWidthPx: 0,
       VEGA_API_KEYS_URL,
       VEGA_SIGNUP_URL,
       // true once we've classified the last APPROVED_ORGS response as not a
@@ -1166,10 +1178,18 @@ export default {
       }
       return ticks
     },
-    // One SVG path per band per severity tone, computed once when the
-    // underlying data/selection changes rather than on every render. Zooming
-    // does NOT recompute these - it only changes the SVG viewBox, so drag-zoom
-    // stays cheap/instant.
+    // Minutes per slice slot: 1 whenever the lane is wide enough to give
+    // every minute MIN_SLOT_PX, otherwise the smallest grouping that is.
+    // Depends on the zoom window, so zooming in refines the slices back
+    // toward one per minute.
+    slotMinutes() {
+      const px = this.laneWidthPx || 1200
+      const span = Math.max(1, this.viewEnd - this.viewStart)
+      return Math.max(1, Math.ceil((span * MIN_SLOT_PX) / px))
+    },
+    // One SVG path per band per ramp step. Recomputed when the data,
+    // selection or slot size changes; the SVG viewBox still does the
+    // horizontal scaling, so drag-zoom stays cheap.
     bandBars() {
       const result = {}
       for (const band of this.bands) {
@@ -1177,34 +1197,8 @@ export default {
       }
       return result
     },
-    // Legend entries for the bar colours, showing the thresholds actually in
-    // force. Thresholds arrive per day from the API; the first loaded day
-    // that has them is used (they are constant per satellite in practice).
-    severityKey() {
-      const dayData = this.days
-        .map((d) => this.dayDataByDate[d.date])
-        .find((d) => d && Number.isFinite(d.toneWarningMin))
-      if (!dayData) return null
-      const warn = dayData.toneWarningMin
-      const high = dayData.toneHighMin
-      return [
-        {
-          tone: 'normal',
-          color: TONE_COLORS.normal,
-          label:
-            warn > 1 ? `${TONE_LABELS.normal} < ${warn}` : TONE_LABELS.normal,
-        },
-        {
-          tone: 'warning',
-          color: TONE_COLORS.warning,
-          label: `${TONE_LABELS.warning} ≥ ${warn}`,
-        },
-        {
-          tone: 'high',
-          color: TONE_COLORS.high,
-          label: `${TONE_LABELS.high} ≥ ${high}`,
-        },
-      ]
+    rampCss() {
+      return `linear-gradient(90deg, ${RAMP_COLORS.join(', ')})`
     },
     dragSelectionStyle() {
       if (this.dragStartPx === null) return null
@@ -1245,13 +1239,17 @@ export default {
           const count = entry.covered
             ? (entry.counts && entry.counts[b]) || 0
             : 0
-          const tone = this.toneOf(count, dayData)
+          const level = this.levelOf(count, b)
           return {
             band: b,
             count,
-            tone,
-            color: tone ? TONE_COLORS[tone] : 'transparent',
-            toneLabel: tone ? TONE_LABELS[tone] : entry.covered ? 'Clear' : '',
+            color: count > 0 ? rampColor(level) : 'transparent',
+            toneLabel:
+              count > 0
+                ? `${Math.round(level * 100)}% of ${b} peak`
+                : entry.covered
+                  ? 'Clear'
+                  : '',
           }
         })
       return {
@@ -1414,7 +1412,16 @@ export default {
       await this.restoreTlmOverlay()
     }
   },
+  // The lanes element only exists once data is loaded (v-if), so the
+  // ResizeObserver is (re)attached after any render that changes it.
+  updated() {
+    this.observeLaneWidth()
+  },
   beforeUnmount() {
+    if (this._laneResizeObserver) {
+      this._laneResizeObserver.disconnect()
+      this._laneResizeObserver = null
+    }
     window.removeEventListener('mousemove', this.onPlotMouseMove)
     window.removeEventListener('mouseup', this.onPlotMouseUp)
     this.stopTelemetryStream()
@@ -1428,6 +1435,21 @@ export default {
     }
   },
   methods: {
+    // Keeps laneWidthPx current so slotMinutes can size the slices to the
+    // pixels actually available. No-op until the lanes element exists.
+    observeLaneWidth() {
+      const el = this.$refs.plot
+      if (!el || el === this._laneObserved) return
+      if (this._laneResizeObserver) this._laneResizeObserver.disconnect()
+      this._laneObserved = el
+      this.laneWidthPx = el.getBoundingClientRect().width
+      if (typeof ResizeObserver === 'undefined') return
+      this._laneResizeObserver = new ResizeObserver((entries) => {
+        const w = entries[0]?.contentRect?.width
+        if (w && Math.abs(w - this.laneWidthPx) >= 1) this.laneWidthPx = w
+      })
+      this._laneResizeObserver.observe(el)
+    },
     // Classifies the Vega connection on mount. The API key never passes
     // through the widget (the interface protocol injects the VEGA_API_KEY
     // COSMOS secret), so all it can do is read what the interface got back.
@@ -1819,41 +1841,43 @@ export default {
       else niceResidual = 10
       return niceResidual * magnitude
     },
-    // Severity tone for a per-band count, using that day's own thresholds
-    // (warning_min / high_min from the API). null = nothing to draw.
-    toneOf(count, dayData) {
-      if (!(count > 0)) return null
-      const warn = dayData?.toneWarningMin ?? 1
-      const high = dayData?.toneHighMin ?? 10
-      if (count >= high) return 'high'
-      if (count >= warn) return 'warning'
-      return 'normal'
-    },
-    // Builds one band's bars across every loaded day as three SVG paths, one
-    // per severity tone, so a lane is at most three <path> elements no matter
-    // how many minutes it holds. Each bar is a 1-minute-wide rect rising from
-    // the baseline (CHART_H) in compressed x coordinates, drawn only inside
-    // passes - the removed between-pass dead time never gets bars. A minute
-    // that isn't covered, or has zero interference, draws nothing: on the
-    // pass-compressed axis "no bar" already reads as "clean".
-    buildBandBars(band) {
-      // Height scales to this band's own peak - see bandMaxes. Colour does
-      // not: it follows the API's absolute per-band thresholds via toneOf.
+    // Interference level of a per-band count relative to that band's peak
+    // in the loaded window, 0..1 - the input to both slice height and the
+    // colour ramp.
+    levelOf(count, band) {
       const max = this.bandMaxes[band] || 1
+      return Math.min(1, Math.max(0, count / max))
+    },
+    // Builds one band's slices across every loaded day as RAMP_STEPS SVG
+    // paths (one per ramp colour). Minutes are walked in slots of
+    // slotMinutes; a slot takes its worst minute's count, so grouping never
+    // hides a spike. Each slice is a SLICE_FILL-wide rect rising from the
+    // baseline (CHART_H) in compressed x coordinates, drawn only inside
+    // passes - the removed between-pass dead time never gets slices. A slot
+    // that isn't covered, or has zero interference, draws nothing: on the
+    // pass-compressed axis "no slice" already reads as "clean".
+    buildBandBars(band) {
       const entries = this.minuteEntries
-      const d = { normal: '', warning: '', high: '' }
+      const slot = this.slotMinutes
+      const w = (slot * SLICE_FILL).toFixed(2)
+      const d = new Array(RAMP_STEPS).fill('')
       for (const seg of this.segments) {
-        for (let idx = seg.startIdx; idx < seg.endIdx; idx++) {
-          const entry = entries[idx]
-          if (!entry || !entry.covered) continue
-          const count = (entry.counts && entry.counts[band]) || 0
-          const day = this.days[Math.floor(idx / 1440)]
-          const tone = this.toneOf(count, day && this.dayDataByDate[day.date])
-          if (!tone) continue
-          const h = Math.min(1, count / max) * CHART_H
+        for (let idx = seg.startIdx; idx < seg.endIdx; idx += slot) {
+          let count = 0
+          const stop = Math.min(seg.endIdx, idx + slot)
+          for (let j = idx; j < stop; j++) {
+            const entry = entries[j]
+            if (!entry || !entry.covered) continue
+            const c = (entry.counts && entry.counts[band]) || 0
+            if (c > count) count = c
+          }
+          if (!(count > 0)) continue
+          const level = this.levelOf(count, band)
+          const step = Math.round(level * (RAMP_STEPS - 1))
+          const h = level * CHART_H
           const x = seg.cstart + (idx - seg.startIdx)
-          // M x,top  h1  V baseline  h-1  Z : one bar, 1 minute wide
-          d[tone] += `M${x},${(CHART_H - h).toFixed(1)}h1V${CHART_H}h-1Z`
+          // M x,top  h w  V baseline  h -w  Z : one slice, w minutes wide
+          d[step] += `M${x},${(CHART_H - h).toFixed(1)}h${w}V${CHART_H}h-${w}Z`
         }
       }
       return d
@@ -2534,7 +2558,7 @@ export default {
 }
 
 // Band toggle chips are plain text now that colour encodes severity rather
-// than band; the severity key next to them explains the bar colours
+// than band; the ramp legend next to them explains the slice colours
 .legend-key {
   display: flex;
   flex-wrap: wrap;
@@ -2580,6 +2604,13 @@ export default {
   display: inline-block;
   width: 10px;
   height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+.ramp-swatch {
+  display: inline-block;
+  width: 110px;
+  height: 8px;
   border-radius: 2px;
   flex: none;
 }
