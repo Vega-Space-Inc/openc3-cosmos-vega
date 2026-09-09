@@ -284,16 +284,13 @@
            the 72h forecast forward), each tagged past / today / forecast.
            Reset zoom and the telemetry overlay toggle sit on the right. -->
       <div class="window-nav">
-        <v-btn-toggle
-          v-model="quickDay"
-          density="compact"
-          variant="outlined"
-          divided
-          class="quick-days"
-        >
-          <v-btn :value="-1" :disabled="loading" size="small">Yesterday</v-btn>
-          <v-btn :value="0" :disabled="loading" size="small">Today</v-btn>
-          <v-btn :value="1" :disabled="loading" size="small">Tomorrow</v-btn>
+        <!-- Plain (variant="text") buttons so the COSMOS shell's outlined /
+             filled button overrides don't apply; the container carries the
+             same Astro field variables the v-selects above are drawn with. -->
+        <v-btn-toggle v-model="quickDay" variant="text" class="quick-days">
+          <v-btn :value="-1" :disabled="loading">Yesterday</v-btn>
+          <v-btn :value="0" :disabled="loading">Today</v-btn>
+          <v-btn :value="1" :disabled="loading">Tomorrow</v-btn>
         </v-btn-toggle>
         <!-- Calendar: a compact icon button opening a short list - the last
              four days and the next three - with today and the selected day
@@ -3340,19 +3337,30 @@ export default {
   gap: 8px;
 }
 .quick-days {
-  /* Match the outlined compact fields beside it: same height, border,
-     radius and text treatment */
+  /* Drawn with the same Astro variables COSMOS applies to v-select
+     fieldsets, so it reads as one of the fields above */
   height: 40px;
-  border: thin solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border: 1px solid var(--color-border-interactive-muted);
   border-radius: 4px;
+  background-color: var(--color-background-base-default);
+  color: var(--color-text-interactive-default);
+  overflow: hidden;
 }
 .quick-days .v-btn {
   height: 100% !important;
+  border-radius: 0;
   text-transform: none;
   letter-spacing: normal;
   font-size: 14px;
   font-weight: 400;
   padding: 0 16px;
+  color: var(--color-text-interactive-default) !important;
+}
+.quick-days .v-btn + .v-btn {
+  border-left: 1px solid var(--color-border-interactive-muted);
+}
+.quick-days .v-btn.v-btn--active {
+  background-color: var(--color-background-surface-selected);
 }
 .cal-btn {
   display: inline-flex;
@@ -3360,19 +3368,16 @@ export default {
   gap: 8px;
   height: 40px;
   padding: 0 12px;
-  border: thin solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border: 1px solid var(--color-border-interactive-muted);
   border-radius: 4px;
-  background: transparent;
-  color: inherit;
+  background-color: var(--color-background-base-default);
+  color: var(--color-text-interactive-default);
   cursor: pointer;
   font-size: 14px;
 }
 .cal-btn:disabled {
   opacity: 0.5;
   cursor: default;
-}
-.cal-btn-date {
-  opacity: 0.85;
 }
 .cal-list {
   min-width: 240px;
