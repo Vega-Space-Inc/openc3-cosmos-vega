@@ -227,6 +227,10 @@
               </v-list-item>
             </v-list>
           </v-menu>
+        </div>
+        <!-- Own line, sized to the widget rather than the widget to it, so
+             a loading message or a long error never changes the width -->
+        <div class="status-line">
           <span v-if="workspaceLoading" class="progress-text"
             >Loading workspace…</span
           >
@@ -379,6 +383,29 @@
             >
               {{ nowLabel }}
             </span>
+          </div>
+        </div>
+        <!-- Pass numbers, centred over their boxes -->
+        <div v-if="passMarks.length" class="pass-row">
+          <div class="x-axis-spacer" />
+          <div class="pass-track">
+            <span
+              v-for="m in passMarks"
+              :key="'pass-' + m.c"
+              class="pass-label"
+              :style="{ left: cToPct(m.c) + '%' }"
+            >
+              {{ m.label }}
+            </span>
+            <div
+              v-if="
+                nowMarkerC !== null &&
+                nowMarkerC > viewStart &&
+                nowMarkerC < viewEnd
+              "
+              class="now-line"
+              :style="{ left: cToPct(nowMarkerC) + '%' }"
+            />
           </div>
         </div>
         <div class="lanes-body" @mouseleave="hoverBand = null">
@@ -601,18 +628,17 @@
           </div>
         </div>
 
-        <div class="x-axis-row" :class="{ 'two-line': axisHasPassLabels }">
+        <div class="x-axis-row">
           <div class="x-axis-spacer" />
           <div class="x-axis">
             <span
               v-for="mark in axisMarks"
               :key="'mark-' + (mark.align || 'c') + mark.c"
               class="hour-mark"
-              :class="['align-' + (mark.align || 'center'), { 'pass-mark': mark.sub }]"
+              :class="'align-' + (mark.align || 'center')"
               :style="{ left: cToPct(mark.c) + '%' }"
             >
-              <div v-if="mark.label">{{ mark.label }}</div>
-              <div v-if="mark.sub" class="pass-label">{{ mark.sub }}</div>
+              {{ mark.label }}
             </span>
           </div>
         </div>
@@ -1350,11 +1376,6 @@ export default {
         if (s.clen * pxPerUnit >= 72) {
           marks.push({ c: s.cstart + s.clen, label: s.endLabel, align: 'end' })
         }
-        marks.push({
-          c: s.cstart + s.clen / 2,
-          sub: `Pass ${s.index}`,
-          align: 'center',
-        })
         return marks
       })
     },
@@ -1512,8 +1533,14 @@ export default {
       }
       return result
     },
-    axisHasPassLabels() {
-      return this.axisMarks.some((m) => m.sub)
+    // 'Pass N' over each pass box; none for a single day-long (GEO) pass.
+    passMarks() {
+      const segs = this.segments
+      if (segs.length < 2) return []
+      return segs.map((s) => ({
+        c: s.cstart + s.clen / 2,
+        label: `Pass ${s.index}`,
+      }))
     },
     dragSelectionStyle() {
       if (this.dragStartPx === null) return null
@@ -2939,6 +2966,17 @@ export default {
   opacity: 0.6;
   white-space: nowrap;
 }
+.status-line {
+  /* Takes the widget's width without contributing to it, and reserves one
+     line so appearing/disappearing text doesn't shift the chart */
+  width: 0;
+  min-width: 100%;
+  min-height: 16px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 16px;
+}
 .progress-text {
   font-size: 12px;
   opacity: 0.7;
@@ -3343,14 +3381,24 @@ export default {
   display: flex;
   height: 16px;
 }
-.x-axis-row.two-line {
-  height: 32px;
+.pass-row {
+  display: flex;
+  height: 18px;
+}
+.pass-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
 }
 .pass-label {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   opacity: 0.9;
+  white-space: nowrap;
 }
 .x-axis-spacer {
   width: 48px; /* .lanes-labels */
@@ -3545,9 +3593,6 @@ export default {
 }
 .hour-mark.align-start {
   transform: none;
-}
-.hour-mark.pass-mark {
-  top: 15px;
 }
 .hour-mark.align-end {
   transform: translateX(-100%);
