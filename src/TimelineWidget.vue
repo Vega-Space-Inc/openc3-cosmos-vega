@@ -294,17 +294,10 @@
         </div>
       </div>
 
+      <!-- Toolbar: the window's date, centred over the chart, with Today /
+           Reset zoom beside it. The previous/next-day arrows flank the
+           chart itself (see .lanes-nav below). -->
       <div class="legend-key">
-        <button
-          v-for="band in bands"
-          :key="band"
-          type="button"
-          class="legend-chip"
-          :class="{ inactive: !visibleBands[band] }"
-          @click="toggleBand(band)"
-        >
-          {{ band }}
-        </button>
         <button
           v-if="tlmItem"
           type="button"
@@ -333,19 +326,6 @@
           Reset zoom ({{ zoomSpanLabel }})
         </button>
         <div class="window-nav">
-          <v-tooltip location="top" text="Previous day">
-            <template #activator="{ props }">
-              <button
-                type="button"
-                class="window-nav-btn"
-                :disabled="loading || windowOffsetDays <= -MAX_BACK_DAYS"
-                v-bind="props"
-                @click="shiftWindow(-1)"
-              >
-                <v-icon size="18">mdi-chevron-left</v-icon>
-              </button>
-            </template>
-          </v-tooltip>
           <span class="window-nav-date">
             <template v-if="days.length === 1">
               {{ days[0].weekday }} {{ days[0].display }}
@@ -354,19 +334,6 @@
               {{ days[0].display }} – {{ days[days.length - 1].display }}
             </template>
           </span>
-          <v-tooltip location="top" text="Next day">
-            <template #activator="{ props }">
-              <button
-                type="button"
-                class="window-nav-btn"
-                :disabled="loading || windowOffsetDays >= MAX_FORWARD_OFFSET"
-                v-bind="props"
-                @click="shiftWindow(1)"
-              >
-                <v-icon size="18">mdi-chevron-right</v-icon>
-              </button>
-            </template>
-          </v-tooltip>
           <button
             v-if="windowOffsetDays !== DEFAULT_WINDOW_OFFSET"
             type="button"
@@ -387,6 +354,21 @@
            numberless; clicking one expands it with that band's tick values. -->
       <div v-if="days.length && bands.length" class="lanes-wrap">
         <div class="lanes-body" @mouseleave="hoverBand = null">
+          <div class="lanes-nav">
+            <v-tooltip location="top" text="Previous day">
+              <template #activator="{ props }">
+                <button
+                  type="button"
+                  class="window-nav-btn"
+                  :disabled="loading || windowOffsetDays <= -MAX_BACK_DAYS"
+                  v-bind="props"
+                  @click="shiftWindow(-1)"
+                >
+                  <v-icon size="18">mdi-chevron-left</v-icon>
+                </button>
+              </template>
+            </v-tooltip>
+          </div>
           <div class="lanes-ytitle"><span>ASI Risk</span></div>
           <div class="lanes-labels">
             <div
@@ -443,7 +425,13 @@
                      rising from the baseline with a gap between neighbours.
                      The viewBox does the horizontal scaling on zoom. -->
                 <g :opacity="hoverBand && hoverBand !== band ? 0.3 : 1">
-                  <g :opacity="hoverSlices && hoverBand === band ? 0.35 : 1">
+                  <g
+                    :opacity="
+                      (hoverSlices && hoverBand === band) || dragBars
+                        ? 0.35
+                        : 1
+                    "
+                  >
                     <path
                       v-for="(d, step) in bandBars[band]"
                       :key="step"
@@ -452,6 +440,18 @@
                       stroke="none"
                     />
                   </g>
+                  <!-- While drag-zooming, the slices inside the selection
+                       are redrawn at full strength over the dimmed lane so
+                       it is clear exactly what the zoom will keep. -->
+                  <template v-if="dragBars">
+                    <path
+                      v-for="(d, step) in dragBars[band]"
+                      :key="'drag-' + step"
+                      :d="d"
+                      :fill="RAMP_COLORS[step]"
+                      stroke="none"
+                    />
+                  </template>
                   <!-- The hovered slice, redrawn at full strength over the
                        dimmed lane so it is unmistakable which bar the
                        tooltip describes. -->
@@ -550,6 +550,21 @@
               </div>
             </div>
           </div>
+          <div class="lanes-nav">
+            <v-tooltip location="top" text="Next day">
+              <template #activator="{ props }">
+                <button
+                  type="button"
+                  class="window-nav-btn"
+                  :disabled="loading || windowOffsetDays >= MAX_FORWARD_OFFSET"
+                  v-bind="props"
+                  @click="shiftWindow(1)"
+                >
+                  <v-icon size="18">mdi-chevron-right</v-icon>
+                </button>
+              </template>
+            </v-tooltip>
+          </div>
         </div>
 
         <div class="x-axis-row">
@@ -567,6 +582,7 @@
               {{ days[0].weekday }} {{ days[0].display }}
             </span>
           </div>
+          <div class="x-axis-spacer-right" />
         </div>
         <!-- Ramp legend: slice colour (and height) is the interferer count
              relative to that band's own peak across the loaded days. -->
@@ -1216,6 +1232,30 @@ export default {
     rampCss() {
       return `linear-gradient(90deg, ${RAMP_COLORS.join(', ')})`
     },
+    // The drag-zoom selection in compressed units, or null when not
+    // dragging (or the drag is still narrower than a click).
+    dragRangeC() {
+      if (this.dragStartPx === null || !this.laneWidthPx) return null
+      const a = Math.min(this.dragStartPx, this.dragCurrentPx)
+      const b = Math.max(this.dragStartPx, this.dragCurrentPx)
+      if (b - a < 4) return null
+      const span = this.viewEnd - this.viewStart
+      return [
+        this.viewStart + (a / this.laneWidthPx) * span,
+        this.viewStart + (b / this.laneWidthPx) * span,
+      ]
+    },
+    // Per band, the slices inside the drag selection - the same paths as
+    // bandBars restricted to that range, drawn on top at full strength.
+    dragBars() {
+      const range = this.dragRangeC
+      if (!range) return null
+      const result = {}
+      for (const band of this.bands) {
+        result[band] = this.buildBandBars(band, range)
+      }
+      return result
+    },
     // The slice slot under the cursor: its minute range [start, stop) and
     // the compressed x of its centre (for the crosshair and tooltip).
     hoverSlot() {
@@ -1627,15 +1667,6 @@ export default {
       this.integrationDetail = detail
       this.notIntegrated = state !== 'connected'
     },
-    toggleBand(band) {
-      this.visibleBands = {
-        ...this.visibleBands,
-        [band]: !this.visibleBands[band],
-      }
-      if (!this.visibleBands[band] && this.expandedBand === band) {
-        this.expandedBand = null
-      }
-    },
     // Click on a lane expands/collapses that band's chart. A click that was
     // actually the tail end of a drag-zoom must not toggle - onPlotMouseUp
     // flags drags and this consumes the flag.
@@ -1905,12 +1936,18 @@ export default {
     // passes - the removed between-pass dead time never gets slices. A slot
     // that isn't covered, or has zero interference, draws nothing: on the
     // pass-compressed axis "no slice" already reads as "clean".
-    buildBandBars(band) {
+    // With a [c0, c1] range (compressed units) only the slots whose centre
+    // falls inside it are built - used for the drag-zoom highlight.
+    buildBandBars(band, range = null) {
       const slot = this.slotMinutes
       const d = new Array(RAMP_STEPS).fill('')
       for (const seg of this.segments) {
         for (let idx = seg.startIdx; idx < seg.endIdx; idx += slot) {
           const stop = Math.min(seg.endIdx, idx + slot)
+          if (range) {
+            const cx = seg.cstart + (idx - seg.startIdx) + (stop - idx) / 2
+            if (cx < range[0] || cx > range[1]) continue
+          }
           const g = this.sliceGeom(band, seg, idx, stop)
           if (g) d[g.step] += g.d
         }
@@ -2632,6 +2669,7 @@ export default {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 .legend-chip {
@@ -2850,9 +2888,10 @@ export default {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(79, 195, 247, 0.15);
-  border-left: 1px solid rgba(79, 195, 247, 0.6);
-  border-right: 1px solid rgba(79, 195, 247, 0.6);
+  /* No tint: the selected slices are already lit and the rest dimmed, so
+     the overlay only needs edges */
+  border-left: 1px solid rgba(79, 195, 247, 0.7);
+  border-right: 1px solid rgba(79, 195, 247, 0.7);
   pointer-events: none;
 }
 .hover-line {
@@ -2977,7 +3016,11 @@ export default {
   height: 34px;
 }
 .x-axis-spacer {
-  width: 84px; /* .lanes-ytitle + .lanes-labels */
+  width: 114px; /* .lanes-nav + .lanes-ytitle + .lanes-labels */
+  flex: none;
+}
+.x-axis-spacer-right {
+  width: 30px; /* .lanes-nav */
   flex: none;
 }
 .x-axis-row .x-axis {
@@ -2989,8 +3032,15 @@ export default {
 .window-nav {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-left: auto;
+  gap: 8px;
+}
+/* Previous/next-day arrows, one column on each side of the lanes */
+.lanes-nav {
+  width: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .window-nav-btn {
   display: flex;
