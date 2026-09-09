@@ -431,7 +431,7 @@
                 hovered: hoverBand === band,
               }"
               @mouseenter="hoverBand = band"
-              @click="onCellClick(band)"
+              @click="onCellClick(band, $event)"
             >
               <div v-if="expandedBand === band" class="lane-title">
                 {{ band }} · ASI Risk
@@ -1928,17 +1928,21 @@ export default {
     // to that pass and expand that band's row. Clicking the open cell again
     // closes it (zoom out, collapse). A click outside any pass (in a gap)
     // falls back to the row toggle.
-    onCellClick(band) {
-      if (this._wasDrag) {
-        this._wasDrag = false
-        return
+    onCellClick(band, e) {
+      if (this._wasDrag) return
+      // Locate the pass from the click itself, not the hover state (which
+      // may be stale or cleared), so a click on a bar always resolves.
+      let seg = null
+      const rect = this.$refs.plot && this.$refs.plot.getBoundingClientRect()
+      if (e && rect && rect.width) {
+        const px = Math.min(Math.max(e.clientX - rect.left, 0), rect.width)
+        const c = this.viewStart + (px / rect.width) * (this.viewEnd - this.viewStart)
+        seg = this.segments.find((s) => c >= s.cstart && c < s.cstart + s.clen) || null
       }
-      const slot = this.hoverSlot
-      if (!slot) {
+      if (!seg) {
         this.expandedBand = this.expandedBand === band ? null : band
         return
       }
-      const seg = slot.seg
       const range = [seg.cstart, seg.cstart + seg.clen]
       const sameZoom =
         this.zoomRange &&
@@ -2262,7 +2266,6 @@ export default {
       const rect = this.$refs.plot.getBoundingClientRect()
       this.dragStartPx = e.clientX - rect.left
       this.dragCurrentPx = this.dragStartPx
-      this.hoverIdx = null // hide the hover crosshair/tooltip while drag-zooming
       window.addEventListener('mousemove', this.onPlotMouseMove)
       window.addEventListener('mouseup', this.onPlotMouseUp)
     },
@@ -2289,6 +2292,11 @@ export default {
         Math.max(e.clientX - rect.left, 0),
         rect.width,
       )
+      // Only once it is really a drag: hide the hover crosshair/tooltip so
+      // the selection highlight reads cleanly. A plain click keeps them.
+      if (Math.abs(this.dragCurrentPx - this.dragStartPx) >= 4) {
+        this.hoverIdx = null
+      }
     },
     onPlotMouseUp() {
       window.removeEventListener('mousemove', this.onPlotMouseMove)
@@ -2300,7 +2308,14 @@ export default {
       this.dragStartPx = null
       this.dragCurrentPx = null
       if (endPx - startPx < 4 || !rect.width) return // treat as a click, not a drag
-      this._wasDrag = true // the trailing click event must not toggle a lane
+      // The click event that trails this mouseup (if any - it only fires
+      // when the press and release share an element) must not open a cell.
+      // Cleared on a timer rather than by the click itself, so a drag that
+      // ends elsewhere can't leave the flag set and swallow the NEXT click.
+      this._wasDrag = true
+      setTimeout(() => {
+        this._wasDrag = false
+      }, 0)
       const span = this.viewEnd - this.viewStart
       const newStart = this.viewStart + (startPx / rect.width) * span
       const newEnd = this.viewStart + (endPx / rect.width) * span
