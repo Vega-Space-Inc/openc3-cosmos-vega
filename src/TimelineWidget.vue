@@ -490,12 +490,24 @@
                 class="pass-cell"
                 :class="{
                   expanded: expandedBand === band,
+                  placeholder: emptyBands[band],
                   active:
+                    !emptyBands[band] &&
                     hoverCell &&
                     hoverCell.band === band &&
                     hoverCell.cstart === seg.cstart,
                 }"
               />
+            </div>
+            <!-- A band with nothing in the whole window gets one cell across
+                 all the passes saying so, instead of a row of empty boxes. -->
+            <div
+              v-for="band in visibleBandList.filter((b) => emptyBands[b])"
+              :key="'empty-' + band"
+              class="empty-row"
+              :style="rowGeometry[band]"
+            >
+              No data
             </div>
             <div
               v-if="hasLoadedData && !segments.length"
@@ -1423,32 +1435,54 @@ export default {
       const c0 = seg.cstart + (start - seg.startIdx)
       return { seg, start, stop, cx: c0 + (stop - start) / 2 }
     },
+    // Where each band's row sits, in px from the top of the plot - mirrors
+    // the lane stack (46px rows, 220px expanded, LANE_GAP_PX between).
+    rowGeometry() {
+      const result = {}
+      let top = 0
+      for (const b of this.visibleBandList) {
+        const h = this.expandedBand === b ? 220 : 46
+        result[b] = { top: `${top}px`, height: `${h}px` }
+        top += h + LANE_GAP_PX
+      }
+      return result
+    },
+    // Bands with no interference anywhere in the loaded window.
+    emptyBands() {
+      const result = {}
+      if (!this.hasLoadedData) return result
+      for (const band of this.bands) {
+        let any = false
+        for (const entry of this.minuteEntries) {
+          if (entry && entry.covered && (entry.counts?.[band] || 0) > 0) {
+            any = true
+            break
+          }
+        }
+        result[band] = !any
+      }
+      return result
+    },
     // The hovered grid cell (pass x band): which one, and where its backdrop
-    // goes. Row geometry mirrors the lane stack (46px rows, 220px expanded,
-    // LANE_GAP_PX between).
+    // goes.
     hoverCell() {
       const slot = this.hoverSlot
       const band = this.hoverBand
       if (!slot || !band || !this.visibleBands[band]) return null
-      let top = 0
-      for (const b of this.visibleBandList) {
-        const h = this.expandedBand === b ? 220 : 46
-        if (b === band) {
-          const span = this.viewEnd - this.viewStart
-          return {
-            band,
-            cstart: slot.seg.cstart,
-            style: {
-              left: `${this.cToPct(slot.seg.cstart)}%`,
-              width: `${(slot.seg.clen / span) * 100}%`,
-              top: `${top}px`,
-              height: `${h}px`,
-            },
-          }
-        }
-        top += h + LANE_GAP_PX
+      if (this.emptyBands[band]) return null
+      const row = this.rowGeometry[band]
+      if (!row) return null
+      const span = this.viewEnd - this.viewStart
+      return {
+        band,
+        cstart: slot.seg.cstart,
+        style: {
+          left: `${this.cToPct(slot.seg.cstart)}%`,
+          width: `${(slot.seg.clen / span) * 100}%`,
+          top: row.top,
+          height: row.height,
+        },
       }
-      return null
     },
     // The hovered slice per band, ready to redraw on top of the dimmed lane.
     hoverSlices() {
@@ -2856,9 +2890,7 @@ export default {
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  padding-bottom: 12px;
   margin-bottom: 10px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
 }
 .controls-row {
   display: flex;
@@ -3217,6 +3249,25 @@ export default {
 }
 .pass-cell.active {
   border-color: rgba(255, 255, 255, 0.75);
+}
+.pass-cell.placeholder {
+  border-color: transparent;
+}
+.empty-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.45;
+  pointer-events: none;
 }
 .cell-highlight {
   position: absolute;
