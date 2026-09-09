@@ -465,12 +465,25 @@
                 </g>
               </svg>
             </div>
+            <!-- One outlined box per pass, carrying its own lane divider
+                 lines, so each pass reads as a chart of its own with clear
+                 space between neighbours. -->
             <div
-              v-for="seg in segments.slice(1)"
-              :key="'sep-' + seg.cstart"
-              class="pass-separator"
-              :style="{ left: separatorPct(seg) + '%' }"
-            />
+              v-for="seg in segments"
+              :key="'box-' + seg.cstart"
+              class="pass-box"
+              :style="{
+                left: cToPct(seg.cstart) + '%',
+                width: (seg.clen / (viewEnd - viewStart)) * 100 + '%',
+              }"
+            >
+              <div
+                v-for="band in visibleBandList"
+                :key="'box-lane-' + band"
+                class="pass-lane-line"
+                :class="{ expanded: expandedBand === band }"
+              />
+            </div>
             <div
               v-if="hasLoadedData && !segments.length"
               class="no-passes-note"
@@ -556,12 +569,12 @@
           <div class="x-axis">
             <span
               v-for="mark in axisMarks"
-              :key="'mark-' + mark.c"
+              :key="'mark-' + (mark.align || 'c') + mark.c"
               class="hour-mark"
-              :class="{ 'hour-mark-end': mark.end }"
+              :class="'align-' + (mark.align || 'center')"
               :style="{ left: cToPct(mark.c) + '%' }"
             >
-              <div>{{ mark.label }}</div>
+              <div v-if="mark.label">{{ mark.label }}</div>
               <div v-if="mark.sub" class="pass-label">{{ mark.sub }}</div>
             </span>
           </div>
@@ -608,7 +621,7 @@ const MAX_BACK_DAYS = 30
 // zoom (passGapUnits converts it), so each pass reads as its own block. A
 // satellite that is always visible (GEO) yields a single day-long pass and
 // keeps normal clock ticks.
-const PASS_GAP_PX = 6
+const PASS_GAP_PX = 14
 // Context minutes on each side of a pass. Zero: slices (unlike the old
 // lines) don't need to rise from a baseline, and any padding is dead space
 // inside the box.
@@ -1164,7 +1177,8 @@ export default {
       return merged.map(([s, e]) => ({
         startIdx: s,
         endIdx: e,
-        label: `${this.formatHM(this.idxToDate(s + PASS_PAD_MIN))}–${this.formatHM(this.idxToDate(e - PASS_PAD_MIN))}`,
+        startLabel: this.formatHM(this.idxToDate(s + PASS_PAD_MIN)),
+        endLabel: this.formatHM(this.idxToDate(e - PASS_PAD_MIN)),
       }))
     },
     // The between-pass gap in compressed units: PASS_GAP_PX of the fully
@@ -1255,15 +1269,17 @@ export default {
         marks.push({
           c: seg.cstart + seg.clen,
           label: endLabel === '00:00' ? '24:00' : endLabel,
-          end: true,
+          align: 'end',
         })
         return marks
       }
-      return segs.map((s) => ({
-        c: s.cstart + s.clen / 2,
-        label: s.label,
-        sub: `Pass ${s.index}`,
-      }))
+      // Each pass is its own little chart: start time on its left edge, end
+      // time on its right, pass number centred beneath.
+      return segs.flatMap((s) => [
+        { c: s.cstart, label: s.startLabel, align: 'start' },
+        { c: s.cstart + s.clen, label: s.endLabel, align: 'end' },
+        { c: s.cstart + s.clen / 2, sub: `Pass ${s.index}`, align: 'center' },
+      ])
     },
     // Each lane is scaled to ITS OWN band's peak, not a shared maximum -
     // severity is relative to the band (5 interferers on VHF can matter more
@@ -1991,9 +2007,6 @@ export default {
     idxToPct(idx) {
       const c = this.idxToC(idx)
       return c === null ? -1000 : this.cToPct(c)
-    },
-    separatorPct(seg) {
-      return this.cToPct(seg.cstart - this.passGapUnits / 2)
     },
     idxToDate(idx) {
       return new Date(this.day0StartMs + idx * 60000)
@@ -3042,15 +3055,38 @@ export default {
   flex: 1;
   min-width: 0;
   cursor: crosshair;
-  border: 1px solid rgba(128, 128, 128, 0.2);
-  border-radius: 4px;
   overflow: hidden;
 }
 .lane-plot {
   position: relative;
   height: 46px;
   transition: height 0.15s ease;
+}
+/* Per-pass outline + lane dividers (the lanes themselves draw no lines, so
+   nothing crosses the gaps between passes) */
+.pass-box {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 3px;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+}
+.pass-lane-line {
+  height: 46px;
+  flex: none;
+  box-sizing: border-box;
   border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+  transition: height 0.15s ease;
+}
+.pass-lane-line.expanded {
+  height: 220px;
+}
+.pass-lane-line:last-child {
+  border-bottom: none;
 }
 .lane-plot.expanded {
   height: 220px;
@@ -3144,14 +3180,6 @@ export default {
   opacity: 0.8;
 }
 /* Vertical divider between passes on the compressed x axis */
-.pass-separator {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 0;
-  border-left: 1px solid rgba(128, 128, 128, 0.35);
-  pointer-events: none;
-}
 .no-passes-note {
   position: absolute;
   inset: 0;
@@ -3241,7 +3269,10 @@ export default {
   opacity: 0.45;
   white-space: nowrap;
 }
-.hour-mark-end {
+.hour-mark.align-start {
+  transform: none;
+}
+.hour-mark.align-end {
   transform: translateX(-100%);
 }
 
