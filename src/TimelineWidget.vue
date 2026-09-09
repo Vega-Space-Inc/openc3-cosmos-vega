@@ -551,7 +551,7 @@
           </div>
         </div>
 
-        <div class="x-axis-row">
+        <div class="x-axis-row" :class="{ 'two-line': axisHasPassLabels }">
           <div class="x-axis-spacer" />
           <div class="x-axis">
             <span
@@ -561,7 +561,8 @@
               :class="{ 'hour-mark-end': mark.end }"
               :style="{ left: cToPct(mark.c) + '%' }"
             >
-              {{ mark.label }}
+              <div>{{ mark.label }}</div>
+              <div v-if="mark.sub" class="pass-label">{{ mark.sub }}</div>
             </span>
           </div>
         </div>
@@ -601,13 +602,13 @@ const MAX_BACK_DAYS = 30
 // LEO passes are minutes long with hours of nothing between them; on a
 // clock axis the chart is mostly empty zero-line. Instead the x axis shows
 // ONLY the passes, laid end to end with a vertical separator between them,
-// each labeled underneath with its time range. Chart x coordinates are
-// "compressed units": 1 unit = 1 minute inside a pass; passes butt up
-// against each other (PASS_GAP_UNITS = 0) so the slices fill each box edge
-// to edge and the separator alone marks the boundary. A satellite that is
-// always visible (GEO) yields a single day-long pass and keeps normal
-// clock ticks.
-const PASS_GAP_UNITS = 0
+// each labeled underneath with its time range and pass number. Chart x
+// coordinates are "compressed units": 1 unit = 1 minute inside a pass;
+// between passes sits a gap that is PASS_GAP_PX wide on screen whatever the
+// zoom (passGapUnits converts it), so each pass reads as its own block. A
+// satellite that is always visible (GEO) yields a single day-long pass and
+// keeps normal clock ticks.
+const PASS_GAP_PX = 6
 // Context minutes on each side of a pass. Zero: slices (unlike the old
 // lines) don't need to rise from a baseline, and any padding is dead space
 // inside the box.
@@ -1166,16 +1167,30 @@ export default {
         label: `${this.formatHM(this.idxToDate(s + PASS_PAD_MIN))}–${this.formatHM(this.idxToDate(e - PASS_PAD_MIN))}`,
       }))
     },
-    // Passes laid out in compressed x coordinates, PASS_GAP_UNITS apart.
+    // The between-pass gap in compressed units: PASS_GAP_PX of the fully
+    // zoomed-out lane width, solved so the passes plus the gaps fill it.
+    passGapUnits() {
+      const n = this.passes.length
+      if (n < 2) return 0
+      const minutes = this.passes.reduce(
+        (sum, p) => sum + (p.endIdx - p.startIdx),
+        0,
+      )
+      const px = this.laneWidthPx || 1200
+      return (PASS_GAP_PX * minutes) / Math.max(1, px - PASS_GAP_PX * (n - 1))
+    },
+    // Passes laid out in compressed x coordinates, passGapUnits apart.
     segments() {
       let c = 0
-      return this.passes.map((p) => {
+      const gap = this.passGapUnits
+      return this.passes.map((p, i) => {
         const seg = {
           ...p,
+          index: i + 1,
           cstart: c,
           clen: p.endIdx - p.startIdx,
         }
-        c += seg.clen + PASS_GAP_UNITS
+        c += seg.clen + gap
         return seg
       })
     },
@@ -1205,7 +1220,7 @@ export default {
       const c = this.idxToC(Math.floor(idx))
       if (c !== null) return c + (idx - Math.floor(idx))
       for (const seg of this.segments) {
-        if (idx < seg.startIdx) return seg.cstart - PASS_GAP_UNITS / 2
+        if (idx < seg.startIdx) return seg.cstart - this.passGapUnits / 2
       }
       return null
     },
@@ -1244,7 +1259,11 @@ export default {
         })
         return marks
       }
-      return segs.map((s) => ({ c: s.cstart + s.clen / 2, label: s.label }))
+      return segs.map((s) => ({
+        c: s.cstart + s.clen / 2,
+        label: s.label,
+        sub: `Pass ${s.index}`,
+      }))
     },
     // Each lane is scaled to ITS OWN band's peak, not a shared maximum -
     // severity is relative to the band (5 interferers on VHF can matter more
@@ -1350,6 +1369,9 @@ export default {
         if (g) result[band] = { d: g.d, color: rampColor(g.level) }
       }
       return result
+    },
+    axisHasPassLabels() {
+      return this.axisMarks.some((m) => m.sub)
     },
     dragSelectionStyle() {
       if (this.dragStartPx === null) return null
@@ -1944,7 +1966,7 @@ export default {
       if (abs >= 10) return v.toFixed(1)
       return Number(v.toPrecision(3)).toString()
     },
-    // Compressed-coordinate helpers (see the PASS_GAP_UNITS block up top).
+    // Compressed-coordinate helpers (see the PASS_GAP_PX block up top).
     idxToC(idx) {
       for (const seg of this.segments) {
         if (idx >= seg.startIdx && idx < seg.endIdx) {
@@ -1971,7 +1993,7 @@ export default {
       return c === null ? -1000 : this.cToPct(c)
     },
     separatorPct(seg) {
-      return this.cToPct(seg.cstart - PASS_GAP_UNITS / 2)
+      return this.cToPct(seg.cstart - this.passGapUnits / 2)
     },
     idxToDate(idx) {
       return new Date(this.day0StartMs + idx * 60000)
@@ -3058,6 +3080,16 @@ export default {
 .x-axis-row {
   display: flex;
   height: 16px;
+}
+.x-axis-row.two-line {
+  height: 32px;
+}
+.pass-label {
+  margin-top: 2px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.9;
 }
 .x-axis-spacer {
   width: 48px; /* .lanes-labels */
