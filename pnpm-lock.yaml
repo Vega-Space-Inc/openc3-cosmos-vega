@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@astrouxds/astro-web-components':
-        specifier: ^7.24.0
-        version: 7.27.0
       '@openc3/js-common':
         specifier: 7.3.0
         version: 7.3.0

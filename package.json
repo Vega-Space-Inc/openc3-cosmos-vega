@@ -1,13 +1,12 @@
 {
-  "name": "TimelineWidget",
-  "version": "7.3.1-beta0",
+  "name": "openc3-cosmos-vega-widget",
+  "version": "0.47.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "vite build"
   },
   "dependencies": {
-    "@astrouxds/astro-web-components": "^7.24.0",
     "@openc3/js-common": "7.3.0",
     "@openc3/vue-common": "7.3.0",
     "vuetify": "^3.7.1"

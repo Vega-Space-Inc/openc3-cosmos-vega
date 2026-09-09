@@ -5,10 +5,15 @@ import vue from '@vitejs/plugin-vue'
 const DEFAULT_EXTENSIONS = ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json']
 
 export default defineConfig({
+  // public/ belongs to the gem (the store image), not to this build -- without
+  // this Vite would copy it into the widget output directory.
+  publicDir: false,
   build: {
     outDir: 'tools/widgets/TimelineWidget',
     emptyOutDir: true,
-    sourcemap: true,
+    // Off by default: the 4 MB .map was being shipped inside the gem. Build
+    // with SOURCEMAP=true when you want the bundle-composition report.
+    sourcemap: process.env.SOURCEMAP === 'true',
     lib: {
       entry: './src/TimelineWidget.vue',
       name: 'TimelineWidget',

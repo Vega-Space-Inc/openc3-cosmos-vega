@@ -9,9 +9,9 @@
 # (each chip previews that band's exact line style). A minute where the
 # satellite isn't covered/visible from the ground station is plotted as zero
 # interactions (not a gap), so every line is continuous. If the target has no
-# working Vega connection yet (vega_api_token still CHANGE_ME or otherwise
-# invalid), an onboarding state is shown instead, with links to create an
-# API key or sign up.
+# working Vega connection yet (the VEGA_API_KEY COSMOS secret is missing or
+# invalid), a read-only onboarding state explains what the COSMOS admin has
+# to set up instead.
 # Driven by the VEGA COSMOS target's GET_DAY_DETAIL command / DAY_DETAIL
 # telemetry, specifically the per-minute MINUTES_JSON breakdown (real
 # per-band interference counts from admin.vega.space/api/v1/frontend/
@@ -29,7 +29,7 @@
               class="onboarding-refresh"
               :class="{ spinning: checkingIntegration }"
               :disabled="checkingIntegration"
-              aria-label="Check again for a valid API key"
+              aria-label="Check the Vega connection again"
               v-bind="props"
               @click="retryIntegrationCheck"
             >
@@ -42,6 +42,27 @@
         <div class="onboarding-body">
           {{ integrationMessage }}
         </div>
+
+        <!-- Read-only: the key lives in a COSMOS secret the interface
+             protocol injects, so there is nothing for the user to enter
+             here. -->
+        <ol v-if="showSetupSteps" class="onboarding-steps">
+          <li>
+            Create a Vega <em>frontend</em> API key (it starts with
+            <code>vgk_</code>) at
+            <a :href="VEGA_API_KEYS_URL" target="_blank" rel="noopener"
+              >app.vega.space/settings/api-keys</a
+            >.
+          </li>
+          <li>
+            In COSMOS, open <strong>Admin → Secrets</strong> and create a secret
+            named <code>VEGA_API_KEY</code> holding that key.
+          </li>
+          <li>
+            Restart the <code>VEGA_INT</code> interface (Admin → Interfaces) so
+            it picks the secret up, then check again.
+          </li>
+        </ol>
 
         <div class="onboarding-actions">
           <a
@@ -61,32 +82,8 @@
             Sign up →
           </a>
         </div>
-
-        <form
-          v-if="showApiKeyForm"
-          class="onboarding-key-form"
-          @submit.prevent="saveApiKey"
-        >
-          <input
-            v-model="apiKeyInput"
-            class="onboarding-key-input"
-            type="password"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="Paste your Vega API key (vgk_…)"
-            :disabled="savingKey"
-            aria-label="Vega API key"
-          />
-          <button
-            type="submit"
-            class="onboarding-key-save"
-            :disabled="savingKey || !apiKeyInput.trim()"
-          >
-            {{ savingKey ? 'Saving…' : 'Save & Connect' }}
-          </button>
-        </form>
-        <div v-if="saveKeyError" class="onboarding-key-error">
-          {{ saveKeyError }}
+        <div v-if="integrationCheckError" class="onboarding-error">
+          {{ integrationCheckError }}
         </div>
       </div>
     </div>
@@ -419,89 +416,102 @@
                 />
               </svg>
             </div>
-          <div
-            v-for="seg in segments.slice(1)"
-            :key="'sep-' + seg.cstart"
-            class="pass-separator"
-            :style="{ left: separatorPct(seg) + '%' }"
-          />
-          <div
-            v-if="hasLoadedData && !segments.length"
-            class="no-passes-note"
-          >
-            No passes in this window
-          </div>
-          <div
-            v-if="
-              nowMarkerC !== null &&
-              nowMarkerC > viewStart &&
-              nowMarkerC < viewEnd
-            "
-            class="now-line"
-            :style="{ left: cToPct(nowMarkerC) + '%' }"
-          >
-            <span class="now-label">now</span>
-          </div>
-          <div
-            v-if="dragSelectionStyle"
-            class="drag-selection"
-            :style="dragSelectionStyle"
-          />
-          <div
-            v-if="hoverIdx !== null && hasLoadedData"
-            class="hover-line"
-            :style="{ left: idxToPct(hoverIdx) + '%' }"
-          />
-          <div
-            v-if="hoverInfo"
-            class="hover-tooltip"
-            :class="{ flip: hoverTooltipFlipped }"
-            :style="{ left: idxToPct(hoverIdx) + '%' }"
-          >
-            <div class="hover-tooltip-time">{{ hoverInfo.label }}</div>
-            <div v-if="!hoverInfo.covered" class="hover-tooltip-nocoverage">
-              Not covered
+            <div
+              v-for="seg in segments.slice(1)"
+              :key="'sep-' + seg.cstart"
+              class="pass-separator"
+              :style="{ left: separatorPct(seg) + '%' }"
+            />
+            <div
+              v-if="hasLoadedData && !segments.length"
+              class="no-passes-note"
+            >
+              No passes in this window
             </div>
             <div
-              v-for="row in hoverInfo.rows"
-              :key="row.band"
-              class="hover-tooltip-row"
-              :class="{ 'hover-tooltip-row-active': row.band === hoverBand }"
+              v-if="
+                nowMarkerC !== null &&
+                nowMarkerC > viewStart &&
+                nowMarkerC < viewEnd
+              "
+              class="now-line"
+              :style="{ left: cToPct(nowMarkerC) + '%' }"
             >
-              <svg class="chip-swatch" width="14" height="8" viewBox="0 0 14 8">
-                <line
-                  x1="0"
-                  y1="4"
-                  x2="14"
-                  y2="4"
-                  :stroke="row.color"
-                  stroke-width="2"
-                />
-              </svg>
-              <span class="hover-tooltip-band">{{ row.band }}</span>
-              <span class="hover-tooltip-count">{{ row.count }}</span>
-            </div>
-            <div v-if="hoverInfo.rows.length === 0" class="hover-tooltip-empty">
-              No bands selected
+              <span class="now-label">now</span>
             </div>
             <div
-              v-if="hoverTelemetry !== null && telemetryVisible"
-              class="hover-tooltip-row hover-tooltip-tlm"
+              v-if="dragSelectionStyle"
+              class="drag-selection"
+              :style="dragSelectionStyle"
+            />
+            <div
+              v-if="hoverIdx !== null && hasLoadedData"
+              class="hover-line"
+              :style="{ left: idxToPct(hoverIdx) + '%' }"
+            />
+            <div
+              v-if="hoverInfo"
+              class="hover-tooltip"
+              :class="{ flip: hoverTooltipFlipped }"
+              :style="{ left: idxToPct(hoverIdx) + '%' }"
             >
-              <svg class="chip-swatch" width="14" height="8" viewBox="0 0 14 8">
-                <line
-                  x1="0"
-                  y1="4"
-                  x2="14"
-                  y2="4"
-                  :stroke="TLM_COLOR"
-                  stroke-width="2"
-                />
-              </svg>
-              <span class="hover-tooltip-band">{{ tlmItem }}</span>
-              <span class="hover-tooltip-count">{{ hoverTelemetry }}</span>
+              <div class="hover-tooltip-time">{{ hoverInfo.label }}</div>
+              <div v-if="!hoverInfo.covered" class="hover-tooltip-nocoverage">
+                Not covered
+              </div>
+              <div
+                v-for="row in hoverInfo.rows"
+                :key="row.band"
+                class="hover-tooltip-row"
+                :class="{ 'hover-tooltip-row-active': row.band === hoverBand }"
+              >
+                <svg
+                  class="chip-swatch"
+                  width="14"
+                  height="8"
+                  viewBox="0 0 14 8"
+                >
+                  <line
+                    x1="0"
+                    y1="4"
+                    x2="14"
+                    y2="4"
+                    :stroke="row.color"
+                    stroke-width="2"
+                  />
+                </svg>
+                <span class="hover-tooltip-band">{{ row.band }}</span>
+                <span class="hover-tooltip-count">{{ row.count }}</span>
+              </div>
+              <div
+                v-if="hoverInfo.rows.length === 0"
+                class="hover-tooltip-empty"
+              >
+                No bands selected
+              </div>
+              <div
+                v-if="hoverTelemetry !== null && telemetryVisible"
+                class="hover-tooltip-row hover-tooltip-tlm"
+              >
+                <svg
+                  class="chip-swatch"
+                  width="14"
+                  height="8"
+                  viewBox="0 0 14 8"
+                >
+                  <line
+                    x1="0"
+                    y1="4"
+                    x2="14"
+                    y2="4"
+                    :stroke="TLM_COLOR"
+                    stroke-width="2"
+                  />
+                </svg>
+                <span class="hover-tooltip-band">{{ tlmItem }}</span>
+                <span class="hover-tooltip-count">{{ hoverTelemetry }}</span>
+              </div>
             </div>
-          </div>
           </div>
         </div>
 
@@ -528,7 +538,10 @@
 
 <script>
 import { Cable, OpenC3Api } from '@openc3/js-common/services'
-import { Widget } from '@openc3/vue-common/widgets'
+// Deliberately no import of the COSMOS vue-common Widget mixin: it pulls
+// ~2 MB of the COSMOS shell (which already loads it) into this bundle, and the
+// only things this widget used from it were the props declared below and
+// computedStyle.
 
 // The chart shows a sliding WINDOW_DAYS-wide window; each chevron click
 // slides it by one day. windowOffsetDays is the window's FIRST day relative
@@ -599,8 +612,37 @@ const BAND_DASH_PATTERNS = [
   '10,3,2,3,2,3', // dash-dot-dot
 ]
 
-// COSMOS setting name used to persist a user-entered API key
-const VEGA_TOKEN_SETTING = 'VEGA_API_TOKEN'
+// CVT poll cadence while waiting for a command's HTTP response to land, and
+// how long "check again" waits for APPROVED_ORGS to refresh before it
+// classifies whatever is there.
+const POLL_INTERVAL_MS = 400
+const INTEGRATION_CHECK_TIMEOUT_MS = 8000
+// Every VEGA command names ERROR_RESPONSE as its HTTP_ERROR_PACKET, and
+// COSMOS routes any HTTP status >= 300 there INSTEAD of the command's own
+// packet - so a success packet never carries an error status, and an error
+// is only visible by watching ERROR_RESPONSE. It is shared by all commands
+// (background periodic polls included), so it is attributed to a request
+// only when it landed after that request's stamp-before-send.
+const ERROR_PACKET = 'ERROR_RESPONSE'
+const ERROR_ITEMS = ['RECEIVED_TIMESECONDS', 'HTTP_STATUS', 'BODY']
+// Everything the connection check reads, in one get_tlm_values call.
+const INTEGRATION_SPEC = {
+  APPROVED_ORGS: ['RECEIVED_TIMESECONDS', 'HTTP_STATUS', 'ORGANIZATIONS_JSON'],
+  [ERROR_PACKET]: ERROR_ITEMS,
+}
+// RECEIVED_TIMESECONDS of a packet snapshot ({ ITEM: value }), 0 if never
+// received.
+function stampOf(values) {
+  return Number(values?.RECEIVED_TIMESECONDS) || 0
+}
+// The interesting part of an ERROR_RESPONSE body for a user-facing message:
+// a short plain string, never an HTML page or a JSON blob.
+function shortErrorBody(body) {
+  if (typeof body !== 'string') return ''
+  const text = body.trim()
+  if (!text || text.length >= 200 || text.startsWith('<')) return ''
+  return text
+}
 const VEGA_API_KEYS_URL = 'https://app.vega.space/settings/api-keys'
 const VEGA_SIGNUP_URL = 'https://app.vega.space/signup'
 const VEGA_APP_URL = 'https://app.vega.space'
@@ -655,26 +697,49 @@ const TLM_ITEM_BLOCKLIST = new Set([
 ])
 
 export default {
-  mixins: [Widget],
+  // The COSMOS screen passes a handful of extra props (widgetIndex,
+  // namedWidgets, line, ...) meant for the stock Widget mixin; keep the ones
+  // we don't declare from landing on the root element as attributes.
+  inheritAttrs: false,
+  props: {
+    // TARGET/PACKET etc. from the screen definition line (unused here - the
+    // widget always talks to the VEGA target)
+    parameters: {
+      type: Array,
+      default: () => [],
+    },
+    // SETTING lines following the widget, e.g. ['WIDTH', '900']
+    settings: {
+      type: Array,
+      default: () => [],
+    },
+    // Values the screen polls for us, keyed TGT__PKT__ITEM__TYPE. Unused: this
+    // widget reads the CVT on demand after each command it sends.
+    screenValues: {
+      type: Object,
+      default: () => ({}),
+    },
+  },
+  emits: ['addItem', 'deleteItem'],
   data() {
     return {
       CHART_H,
       VEGA_API_KEYS_URL,
       VEGA_SIGNUP_URL,
-      // true once we've tried loading orgs and come up empty - shows the
-      // "connect your Vega account" onboarding state instead of the normal
-      // pickers/chart. null = haven't checked yet (initial load).
+      // true once we've classified the last APPROVED_ORGS response as not a
+      // working connection - shows the setup/onboarding state instead of the
+      // normal pickers/chart.
       notIntegrated: false,
+      // 'checking' | 'connected' | 'missing_key' | 'no_access' | 'unavailable'
       integrationState: 'checking',
       checkingIntegration: false,
-      // API key entered in the onboarding form. Saved to a COSMOS setting
-      // (VEGA_API_TOKEN) and then passed as an HTTP_HEADER_AUTHORIZATION
-      // override on every command this widget sends, so the user can connect
-      // without reinstalling the plugin to change vega_api_token.
-      apiKeyInput: '',
-      savedApiKey: null,
-      savingKey: false,
-      saveKeyError: '',
+      // Error from the last "check again" attempt (e.g. the command could not
+      // be sent because VEGA_INT is not connected).
+      integrationCheckError: '',
+      // HTTP status (and short body) of the ERROR_RESPONSE that produced the
+      // current non-connected state, for the message; null when unknown.
+      integrationStatus: null,
+      integrationDetail: '',
       organizations: [],
       selectedOrgId: null,
       workspaceLoading: false,
@@ -741,23 +806,58 @@ export default {
       }))
     },
     integrationTitle() {
-      if (this.integrationState === 'no_access')
-        return 'No approved organizations yet'
-      return 'Connect Vega'
+      switch (this.integrationState) {
+        case 'no_access':
+          return 'No approved organizations yet'
+        case 'missing_key':
+          return 'Vega API key missing or invalid'
+        case 'checking':
+          return 'Checking the Vega connection…'
+        default:
+          return this.integrationStatus
+            ? `Vega returned HTTP ${this.integrationStatus}`
+            : 'Vega is not responding'
+      }
     },
     integrationMessage() {
-      if (this.integrationState === 'no_access') {
-        return 'Your API key is valid, but its user has no approved organization access. Approve an organization in Vega, then check again.'
+      const detail = this.integrationDetail
+        ? ` (${this.integrationDetail})`
+        : ''
+      switch (this.integrationState) {
+        case 'no_access':
+          return `The API key works, but its user has no approved organization access${detail}. Approve an organization in Vega, then check again.`
+        case 'missing_key':
+          return `Vega rejected the API key (HTTP 401${detail}). A COSMOS admin needs to configure it as a COSMOS secret - the widget never handles it:`
+        case 'checking':
+          return 'Reading the last Vega response from COSMOS…'
+        default:
+          return `${
+            this.integrationStatus
+              ? `Vega returned HTTP ${this.integrationStatus}${detail}.`
+              : 'COSMOS has no response from VEGA_INT yet.'
+          } A COSMOS admin should confirm the setup below, then check again:`
       }
-      if (this.integrationState === 'unavailable') {
-        return 'Sign in to Vega to get an API key, then add it below to connect.'
-      }
-      return 'Create an account and an API Key on Vega. Add it below to finalize the connection.'
     },
-    // The key form is only useful when a key is what's actually missing -
-    // in 'no_access' the key already works, the org approval is the blocker.
-    showApiKeyForm() {
-      return this.integrationState !== 'no_access'
+    // The setup steps only help when the setup is what's missing - in
+    // 'no_access' the key already works, the org approval is the blocker.
+    showSetupSteps() {
+      return ['missing_key', 'unavailable'].includes(this.integrationState)
+    },
+    // Style from the screen's SETTING lines (WIDTH/HEIGHT/RAW), the subset of
+    // the COSMOS Widget mixin's computedStyle this widget needs.
+    computedStyle() {
+      const style = {}
+      for (const setting of this.settings) {
+        const [key, value, extra] = setting
+        if (key === 'WIDTH' || key === 'HEIGHT') {
+          style[key.toLowerCase()] = Number.isFinite(Number(value))
+            ? `${value}px`
+            : value
+        } else if (typeof key === 'string' && key.startsWith('RAW') && value) {
+          style[value.toLowerCase()] = extra
+        }
+      }
+      return style
     },
     selectedOrg() {
       return this.organizations.find((o) => o.id === this.selectedOrgId) || null
@@ -871,7 +971,8 @@ export default {
       const spans = []
       let start = null
       for (let i = 0; i <= entries.length; i++) {
-        const covered = i < entries.length && !!(entries[i] && entries[i].covered)
+        const covered =
+          i < entries.length && !!(entries[i] && entries[i].covered)
         if (covered && start === null) start = i
         if (!covered && start !== null) {
           spans.push([start, i])
@@ -1111,7 +1212,10 @@ export default {
       const ticks = []
       for (let i = 0; i <= steps; i++) {
         const value = range.min + ((range.max - range.min) * i) / steps
-        ticks.push({ label: this.formatTlmValue(value), pct: (i / steps) * 100 })
+        ticks.push({
+          label: this.formatTlmValue(value),
+          pct: (i / steps) * 100,
+        })
       }
       return ticks
     },
@@ -1200,9 +1304,6 @@ export default {
     this._forecastGen = 0
     // Per-(satellite, station, day) response cache - see loadForecast.
     this._dayCache = {}
-    // Load any user-saved API key first so checkIntegration's polls (and
-    // everything after) authenticate with it rather than the plugin default.
-    await this.loadSavedApiKey()
     await this.checkIntegration()
     // Telemetry overlay is COSMOS-local, so it works even when the Vega
     // integration isn't connected yet.
@@ -1225,103 +1326,91 @@ export default {
     }
   },
   methods: {
-    // Checks whether this target has a working Vega connection by reading
-    // the approved-organizations list. Empty (or an outright failure) means
-    // vega_api_token is still the plugin's CHANGE_ME default or otherwise
-    // invalid - not a hard "unauthorized" telemetry error, since a bad key
-    // just means APPROVED_ORGS never got a successful response to show.
-    // Command-parameter overrides applied to every request this widget
-    // sends. When the user has saved a key via the onboarding form we send
-    // it as the Authorization header, overriding whatever vega_api_token was
-    // baked into the command definition at install time. With no saved key
-    // we send nothing and the plugin's own variable is used as-is.
-    authOverride() {
-      if (!this.savedApiKey) return {}
-      return { HTTP_HEADER_AUTHORIZATION: `Bearer ${this.savedApiKey}` }
-    },
-    // Loads a previously-saved key from COSMOS settings. Safe to fail - we
-    // just fall back to the plugin's vega_api_token variable.
-    async loadSavedApiKey() {
-      try {
-        const key = await this.api.get_setting(VEGA_TOKEN_SETTING)
-        this.savedApiKey = key || null
-      } catch (e) {
-        this.savedApiKey = null
-      }
-    },
-    // Saves the entered key to COSMOS settings, then immediately re-checks
-    // the connection using it. NOTE: set_setting requires admin permission
-    // and COSMOS logs the saved value, so this key ends up in the COSMOS
-    // text log - see the plugin README.
-    async saveApiKey() {
-      const key = (this.apiKeyInput || '').trim()
-      if (!key) return
-      if (!key.startsWith('vgk_')) {
-        this.saveKeyError = 'Enter a Vega frontend API key beginning with vgk_.'
-        return
-      }
-      this.savingKey = true
-      this.saveKeyError = ''
-      try {
-        await this.api.set_setting(VEGA_TOKEN_SETTING, key)
-        this.savedApiKey = key
-        this.apiKeyInput = ''
-        // Re-poll with the new key so the packets refresh under it.
-        await this.retryIntegrationCheck()
-      } catch (e) {
-        this.saveKeyError = `Could not save key: ${e.message}`
-      } finally {
-        this.savingKey = false
-      }
-    },
+    // Classifies the Vega connection on mount. The API key never passes
+    // through the widget (the interface protocol injects the VEGA_API_KEY
+    // COSMOS secret), so all it can do is read what the interface got back.
+    // Fast path: APPROVED_ORGS already holds a 200 from the periodic poll ->
+    // classify it without a round trip to Vega. Otherwise (never received,
+    // or a stale success we can't vouch for) run the active probe.
     async checkIntegration() {
       try {
-        const [organizations, status] = await Promise.all([
-          this.api.tlm('VEGA', 'APPROVED_ORGS', 'ORGANIZATIONS_JSON'),
-          this.api.tlm('VEGA', 'APPROVED_ORGS', 'HTTP_STATUS'),
-        ])
-        if (Number(status) !== 200) {
-          this.integrationState =
-            Number(status) === 401 || Number(status) === 403
-              ? 'invalid'
-              : 'unavailable'
-          this.notIntegrated = true
+        const snap = await this.readPackets(INTEGRATION_SPEC)
+        const ok = snap.APPROVED_ORGS
+        if (stampOf(ok) > 0 && (Number(ok.HTTP_STATUS) || 0) === 200) {
+          this.applyApprovedOrgs(ok.ORGANIZATIONS_JSON)
           return
         }
-        this.organizations = organizations || []
-        if (this.organizations.length === 0) {
-          this.integrationState = 'no_access'
-          this.notIntegrated = true
-          return
-        }
-        this.integrationState = 'connected'
-        this.notIntegrated = false
-        // Setting this triggers the selectedOrgId watcher, which does the
-        // actual workspace fetch.
-        this.selectedOrgId = this.organizations[0].id
       } catch (e) {
-        this.integrationState = 'unavailable'
-        this.notIntegrated = true
+        // fall through to the active probe
       }
+      await this.retryIntegrationCheck()
     },
-    // "Check again" button in the onboarding state - forces a fresh
-    // GET_APPROVED_ORGS poll (rather than waiting up to vega_poll_period for
-    // the periodic one) so a user who just added a real API key doesn't have
-    // to wait or reload.
+    // "Check again" button in the onboarding state (and the mount-time
+    // fallback): sends GET_APPROVED_ORGS and waits for the answer to land.
+    // A success lands in APPROVED_ORGS; any HTTP error lands in the shared
+    // ERROR_RESPONSE packet instead (see ERROR_PACKET), so both are stamped
+    // before the send and whichever advances first is the answer:
+    //   APPROVED_ORGS advanced -> connected, or no_access when no orgs
+    //   ERROR_RESPONSE advanced -> 401 missing_key, 403 no_access,
+    //                              anything else (429, 5xx) unavailable
+    //   neither within the timeout -> unavailable ("no response")
     async retryIntegrationCheck() {
       this.checkingIntegration = true
-      this.saveKeyError = ''
+      this.integrationCheckError = ''
       try {
-        await this.api.cmd('VEGA', 'GET_APPROVED_ORGS', this.authOverride())
-        await new Promise((resolve) => setTimeout(resolve, 1500))
-        await this.checkIntegration()
+        const before = await this.readPackets(INTEGRATION_SPEC)
+        const okStamp = stampOf(before.APPROVED_ORGS)
+        const errStamp = stampOf(before[ERROR_PACKET])
+        await this.api.cmd('VEGA', 'GET_APPROVED_ORGS')
+        const deadline = Date.now() + INTEGRATION_CHECK_TIMEOUT_MS
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+          const snap = await this.readPackets(INTEGRATION_SPEC)
+          const ok = snap.APPROVED_ORGS
+          const err = snap[ERROR_PACKET]
+          if (stampOf(ok) > okStamp) {
+            this.applyApprovedOrgs(ok.ORGANIZATIONS_JSON)
+            return
+          }
+          if (stampOf(err) > errStamp) {
+            const status = Number(err.HTTP_STATUS) || 0
+            const detail = shortErrorBody(err.BODY)
+            if (status === 401) {
+              this.setIntegrationState('missing_key', status, detail)
+            } else if (status === 403) {
+              this.setIntegrationState('no_access', status, detail)
+            } else {
+              this.setIntegrationState('unavailable', status, detail)
+            }
+            return
+          }
+        }
+        this.setIntegrationState('unavailable')
       } catch (e) {
-        this.integrationState = 'unavailable'
-        this.notIntegrated = true
-        this.saveKeyError = `Could not check the Vega connection: ${e.message}`
+        this.setIntegrationState('unavailable')
+        this.integrationCheckError = `Could not check the Vega connection: ${e.message}`
       } finally {
         this.checkingIntegration = false
       }
+    },
+    // A 200 APPROVED_ORGS response: connected when it lists organizations,
+    // otherwise the key works but has no approved org.
+    applyApprovedOrgs(orgs) {
+      this.organizations = orgs || []
+      if (this.organizations.length === 0) {
+        this.setIntegrationState('no_access', 200)
+        return
+      }
+      this.setIntegrationState('connected', 200)
+      // Setting this triggers the selectedOrgId watcher, which does the
+      // actual workspace fetch.
+      this.selectedOrgId = this.organizations[0].id
+    },
+    setIntegrationState(state, status = null, detail = '') {
+      this.integrationState = state
+      this.integrationStatus = status
+      this.integrationDetail = detail
+      this.notIntegrated = state !== 'connected'
     },
     toggleBand(band) {
       this.visibleBands = {
@@ -1762,6 +1851,8 @@ export default {
           return await this.fetchForecastAvailabilityForOrg(orgId)
         } catch (e) {
           lastError = e
+          // The interface can't fix a 401/403/404 by reconnecting.
+          if (this.isFinalHttpError(e)) throw e
           if (i < attempts - 1) {
             await this.waitForInterfaceConnected(20000)
           }
@@ -1770,45 +1861,32 @@ export default {
       throw lastError
     },
     // Sends GET_FORECASTING_SUMMARY with HTTP_PATH overridden to the given
-    // org, then polls VEGA FORECASTING_SUMMARY until ORG_ID confirms it
-    // reflects THIS request (same reasoning as fetchWorkspaceForOrg - the
-    // periodic default-org poll keeps writing to this same packet). Returns
-    // a { [satelliteId]: forecastAvailable } map built from the full
-    // satellites array.
+    // org, then waits for VEGA FORECASTING_SUMMARY to carry a fresh response
+    // whose ORG_ID confirms it reflects THIS request (same reasoning as
+    // fetchWorkspaceForOrg - the periodic default-org poll keeps writing to
+    // this same packet). Returns a { [satelliteId]: forecastAvailable } map
+    // built from the full satellites array.
     async fetchForecastAvailabilityForOrg(orgId) {
-      const sentAt = Date.now()
-      await this.api.cmd('VEGA', 'GET_FORECASTING_SUMMARY', {
-        ...this.authOverride(),
-        HTTP_PATH: `/api/v1/frontend/organizations/${orgId}/forecasting/summary`,
+      const { status, values } = await this.requestPacket({
+        command: 'GET_FORECASTING_SUMMARY',
+        params: {
+          HTTP_PATH: `/api/v1/frontend/organizations/${orgId}/forecasting/summary`,
+        },
+        packet: 'FORECASTING_SUMMARY',
+        echo: ['ORG_ID'],
+        matches: (v) => Number(v.ORG_ID) === Number(orgId),
+        payload: ['SATELLITES_JSON'],
+        timeoutMs: 15000,
+        label: `forecasting summary of org ${orgId}`,
       })
-      const deadline = Date.now() + 15000
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 400))
-        const [respOrgId, status] = await Promise.all([
-          this.api.tlm('VEGA', 'FORECASTING_SUMMARY', 'ORG_ID'),
-          this.api.tlm('VEGA', 'FORECASTING_SUMMARY', 'HTTP_STATUS'),
-        ])
-        if (Number(respOrgId) === Number(orgId)) {
-          if (status && status >= 300) {
-            throw new Error(
-              `HTTP ${status} for org ${orgId} forecasting summary`,
-            )
-          }
-          const satellites = await this.api.tlm(
-            'VEGA',
-            'FORECASTING_SUMMARY',
-            'SATELLITES_JSON',
-          )
-          const map = {}
-          for (const sat of satellites || []) {
-            map[sat.id] = !!sat.forecast_available
-          }
-          return map
-        }
+      if (status >= 300) {
+        throw new Error(`HTTP ${status} for org ${orgId} forecasting summary`)
       }
-      throw new Error(
-        `Timed out waiting for forecasting summary of org ${orgId} (sent ${Date.now() - sentAt}ms ago)`,
-      )
+      const map = {}
+      for (const sat of values.SATELLITES_JSON || []) {
+        map[sat.id] = !!sat.forecast_available
+      }
+      return map
     },
     async fetchWorkspaceForOrgWithRetry(orgId, attempts = 4) {
       let lastError
@@ -1817,6 +1895,8 @@ export default {
           return await this.fetchWorkspaceForOrg(orgId)
         } catch (e) {
           lastError = e
+          // The interface can't fix a 401/403/404 by reconnecting.
+          if (this.isFinalHttpError(e)) throw e
           if (i < attempts - 1) {
             await this.waitForInterfaceConnected(20000)
           }
@@ -1825,39 +1905,30 @@ export default {
       throw lastError
     },
     // Sends GET_WORKSPACE with HTTP_PATH overridden to the given org, then
-    // polls VEGA WORKSPACE until ORG_ID confirms it reflects THIS request -
-    // needed because the periodic poll (plugin's default vega_org_id) keeps
-    // writing to this same packet in the background regardless.
+    // waits for VEGA WORKSPACE to carry a fresh response whose ORG_ID confirms
+    // it reflects THIS request - needed because the periodic poll (plugin's
+    // default vega_org_id) keeps writing to this same packet in the
+    // background regardless.
     async fetchWorkspaceForOrg(orgId) {
-      const sentAt = Date.now()
-      await this.api.cmd('VEGA', 'GET_WORKSPACE', {
-        ...this.authOverride(),
-        HTTP_PATH: `/api/v1/frontend/organizations/${orgId}/workspace`,
+      const { status, values } = await this.requestPacket({
+        command: 'GET_WORKSPACE',
+        params: {
+          HTTP_PATH: `/api/v1/frontend/organizations/${orgId}/workspace`,
+        },
+        packet: 'WORKSPACE',
+        echo: ['ORG_ID'],
+        matches: (v) => Number(v.ORG_ID) === Number(orgId),
+        payload: ['SATELLITES_JSON', 'GROUND_STATIONS_JSON'],
+        timeoutMs: 15000,
+        label: `workspace of org ${orgId}`,
       })
-      const deadline = Date.now() + 15000
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 400))
-        const [respOrgId, status] = await Promise.all([
-          this.api.tlm('VEGA', 'WORKSPACE', 'ORG_ID'),
-          this.api.tlm('VEGA', 'WORKSPACE', 'HTTP_STATUS'),
-        ])
-        if (Number(respOrgId) === Number(orgId)) {
-          if (status && status >= 300) {
-            throw new Error(`HTTP ${status} for org ${orgId}`)
-          }
-          const [satellites, groundStations] = await Promise.all([
-            this.api.tlm('VEGA', 'WORKSPACE', 'SATELLITES_JSON'),
-            this.api.tlm('VEGA', 'WORKSPACE', 'GROUND_STATIONS_JSON'),
-          ])
-          return {
-            satellites: satellites || [],
-            groundStations: groundStations || [],
-          }
-        }
+      if (status >= 300) {
+        throw new Error(`HTTP ${status} for org ${orgId}`)
       }
-      throw new Error(
-        `Timed out waiting for workspace of org ${orgId} (sent ${Date.now() - sentAt}ms ago)`,
-      )
+      return {
+        satellites: values.SATELLITES_JSON || [],
+        groundStations: values.GROUND_STATIONS_JSON || [],
+      }
     },
     dayCacheKey(satId, gsId, day) {
       return `${satId}|${gsId}|${day.date}|${day.past ? 'h' : 'f'}`
@@ -1969,7 +2040,13 @@ export default {
     // days render through the identical band-line pipeline as the forecast:
     // same colors, dash patterns, legend toggles and tooltip. A 404/timeout
     // is non-fatal upstream - the chart just shows forecast only.
-    async loadHistory(satelliteId, groundStationId, gen, pastDays, attempts = 3) {
+    async loadHistory(
+      satelliteId,
+      groundStationId,
+      gen,
+      pastDays,
+      attempts = 3,
+    ) {
       if (!pastDays?.length) return
       const startIso = `${pastDays[0].date}T00:00:00Z`
       const endIso = `${this.dateAfter(pastDays[pastDays.length - 1].date)}T00:00:00Z`
@@ -2019,13 +2096,16 @@ export default {
             }
             merged[day.date] = dayData
             // Measured history is immutable - cache it for the session.
-            this._dayCache[this.dayCacheKey(satelliteId, groundStationId, day)] =
-              { at: Date.now(), data: dayData }
+            this._dayCache[
+              this.dayCacheKey(satelliteId, groundStationId, day)
+            ] = { at: Date.now(), data: dayData }
           }
           this.dayDataByDate = { ...this.dayDataByDate, ...merged }
           return
         } catch (e) {
           lastError = e
+          // The interface can't fix a 401/403/404 by reconnecting.
+          if (this.isFinalHttpError(e)) throw e
           if (i < attempts - 1) {
             await this.waitForInterfaceConnected(20000)
           }
@@ -2033,48 +2113,36 @@ export default {
       }
       throw lastError
     },
-    // Sends GET_HISTORY then polls VEGA HISTORY until it reflects this exact
-    // request (matched by ground station id + range start), mirroring
-    // fetchDayDetail. NOTE: a non-2xx response (e.g. 404 when no run covers
-    // the range) is routed to the AUTH_ERROR packet by HTTP_ERROR_PACKET, so
-    // HISTORY never updates and this times out - callers treat that as
-    // "no history available", not a hard failure.
+    // Sends GET_HISTORY then waits for VEGA HISTORY to carry a fresh response
+    // to this exact request (matched by satellite + ground station + range
+    // start), mirroring fetchDayDetail. A non-2xx response (e.g. 404 when no
+    // run covers the range) lands in ERROR_RESPONSE and is thrown as
+    // `HTTP 404 for history` - callers treat that as "no history available",
+    // not a hard failure.
     async fetchHistory(satelliteId, groundStationId, startIso, endIso) {
-      await this.api.cmd('VEGA', 'GET_HISTORY', {
-        ...this.authOverride(),
-        HTTP_PATH: `/api/v1/frontend/organizations/${this.selectedOrgId}/forecasting/history`,
-        HTTP_QUERY_SATELLITE_ID: satelliteId,
-        HTTP_QUERY_GROUND_STATION_ID: groundStationId,
-        HTTP_QUERY_START_TIME: startIso,
-        HTTP_QUERY_END_TIME: endIso,
+      const { status, values } = await this.requestPacket({
+        command: 'GET_HISTORY',
+        params: {
+          HTTP_PATH: `/api/v1/frontend/organizations/${this.selectedOrgId}/forecasting/history`,
+          HTTP_QUERY_SATELLITE_ID: satelliteId,
+          HTTP_QUERY_GROUND_STATION_ID: groundStationId,
+          HTTP_QUERY_START_TIME: startIso,
+          HTTP_QUERY_END_TIME: endIso,
+        },
+        packet: 'HISTORY',
+        echo: ['SATELLITE_ID', 'GROUND_STATION_ID', 'START_TIME'],
+        matches: (v) =>
+          Number(v.SATELLITE_ID) === Number(satelliteId) &&
+          Number(v.GROUND_STATION_ID) === Number(groundStationId) &&
+          v.START_TIME === startIso,
+        payload: ['TIMESERIES_JSON'],
+        timeoutMs: 20000,
+        label: 'history (range may have no coverage)',
       })
-      const deadline = Date.now() + 20000
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 400))
-        const [respSatelliteId, respGsId, respStart, status] =
-          await Promise.all([
-            this.api.tlm('VEGA', 'HISTORY', 'SATELLITE_ID'),
-            this.api.tlm('VEGA', 'HISTORY', 'GROUND_STATION_ID'),
-            this.api.tlm('VEGA', 'HISTORY', 'START_TIME'),
-            this.api.tlm('VEGA', 'HISTORY', 'HTTP_STATUS'),
-          ])
-        if (
-          Number(respSatelliteId) === Number(satelliteId) &&
-          Number(respGsId) === Number(groundStationId) &&
-          respStart === startIso
-        ) {
-          if (status && status >= 300) {
-            throw new Error(`HTTP ${status} for history`)
-          }
-          const timeseries = await this.api.tlm(
-            'VEGA',
-            'HISTORY',
-            'TIMESERIES_JSON',
-          )
-          return timeseries || []
-        }
+      if (status >= 300) {
+        throw new Error(`HTTP ${status} for history`)
       }
-      throw new Error('Timed out waiting for history (range may have no coverage)')
+      return values.TIMESERIES_JSON || []
     },
     // Wraps fetchDayDetail with retries. A request to admin.vega.space can
     // occasionally hang past the interface's read timeout (rate limiting /
@@ -2096,6 +2164,8 @@ export default {
           return await this.fetchDayDetail(satelliteId, groundStationId, date)
         } catch (e) {
           lastError = e
+          // The interface can't fix a 401/403/404 by reconnecting.
+          if (this.isFinalHttpError(e)) throw e
           if (i < attempts - 1) {
             await this.waitForInterfaceConnected(20000)
           }
@@ -2118,54 +2188,146 @@ export default {
         await new Promise((resolve) => setTimeout(resolve, 500))
       }
     },
-    // Sends GET_DAY_DETAIL then polls VEGA DAY_DETAIL until it reflects this
-    // exact request (matched by ground station id + date), since HTTP
-    // responses land asynchronously via the interface -> decom pipeline.
-    // HTTP_PATH is overridden to embed the currently-selected org id -
-    // GET_DAY_DETAIL's command definition only bakes in the plugin's default
-    // vega_org_id, so this is what lets the widget query ANY org the API key
-    // has approved access to, not just the one the plugin was installed with.
-    async fetchDayDetail(satelliteId, groundStationId, date) {
-      const sentAt = Date.now()
-      await this.api.cmd('VEGA', 'GET_DAY_DETAIL', {
-        ...this.authOverride(),
-        HTTP_PATH: `/api/v1/frontend/organizations/${this.selectedOrgId}/forecasting/day_detail`,
-        HTTP_QUERY_SATELLITE_ID: satelliteId,
-        HTTP_QUERY_GROUND_STATION_ID: groundStationId,
-        HTTP_QUERY_DATE: date,
+    // Reads items from one or more VEGA packets in a single get_tlm_values
+    // round trip (it takes TGT__PKT__ITEM__TYPE keys - from any packets - and
+    // returns one [value, limitsState] pair per key, in order).
+    // spec = { PACKET: [ITEM, ...] }; returns { PACKET: { ITEM: value } }.
+    async readPackets(spec) {
+      const keys = []
+      for (const [packet, items] of Object.entries(spec)) {
+        for (const item of items) keys.push([packet, item])
+      }
+      const rows = await this.api.get_tlm_values(
+        keys.map(([packet, item]) => `VEGA__${packet}__${item}__CONVERTED`),
+      )
+      const out = {}
+      keys.forEach(([packet, item], i) => {
+        if (!out[packet]) out[packet] = {}
+        out[packet][item] = rows?.[i]?.[0] ?? null
       })
-      const deadline = Date.now() + 15000
+      return out
+    },
+    async readPacket(packet, items) {
+      return (await this.readPackets({ [packet]: items }))[packet]
+    },
+    // Errors an HTTP failure needs no retry for: the request itself is what
+    // Vega rejected (bad key, no access, nothing at that path), as opposed to
+    // a transport failure or timeout that a reconnected interface may fix.
+    isFinalHttpError(e) {
+      return [401, 403, 404].includes(e?.status)
+    },
+    // Sends `command` and polls until its answer is in the CVT. A success
+    // lands in `packet`; an HTTP error lands in ERROR_RESPONSE instead (see
+    // ERROR_PACKET), so both are stamped BEFORE the send and watched
+    // together in one call per poll.
+    // Success requires a response that (a) arrived after the send and
+    // (b) echoes this request (`matches` over the `echo` items). Both checks
+    // matter: the echo alone would accept the previous response when an
+    // identical request is repeated (e.g. today's day re-fetched after the
+    // forecast cache expires), and the timestamp alone would accept the
+    // periodic default-org poll's response when it happens to land first.
+    // Once matched, the `payload` items are read in one more call and
+    // re-checked against the same timestamp, so a response landing in
+    // between can't be mixed in.
+    // An ERROR_RESPONSE that advanced past its stamp throws immediately with
+    // `error.status` set (rather than burning the whole timeout). Caveat:
+    // ERROR_RESPONSE is shared by every VEGA command, including the
+    // background periodic polls - one of those failing in the same window
+    // would be misattributed to this request. Accepted: stamp-before-send is
+    // the best available filter without per-command error packets.
+    // Resolves { status, values } (values = echo + payload items).
+    async requestPacket({
+      command,
+      params,
+      packet,
+      echo,
+      matches,
+      payload,
+      timeoutMs,
+      label,
+    }) {
+      const sentAt = Date.now()
+      const before = await this.readPackets({
+        [packet]: ['RECEIVED_TIMESECONDS'],
+        [ERROR_PACKET]: ['RECEIVED_TIMESECONDS'],
+      })
+      const stamp = stampOf(before[packet])
+      const errStamp = stampOf(before[ERROR_PACKET])
+      await this.api.cmd('VEGA', command, params)
+      const pollSpec = {
+        [packet]: ['RECEIVED_TIMESECONDS', 'HTTP_STATUS', ...echo],
+        [ERROR_PACKET]: ERROR_ITEMS,
+      }
+      const deadline = Date.now() + timeoutMs
       while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 400))
-        const [respSatelliteId, gsId, respDate, status] = await Promise.all([
-          this.api.tlm('VEGA', 'DAY_DETAIL', 'SATELLITE_ID'),
-          this.api.tlm('VEGA', 'DAY_DETAIL', 'GROUND_STATION_ID'),
-          this.api.tlm('VEGA', 'DAY_DETAIL', 'DATE'),
-          this.api.tlm('VEGA', 'DAY_DETAIL', 'HTTP_STATUS'),
-        ])
-        if (
-          Number(respSatelliteId) === Number(satelliteId) &&
-          Number(gsId) === Number(groundStationId) &&
-          respDate === date
-        ) {
-          if (status && status >= 300) {
-            throw new Error(`HTTP ${status} for ${date}`)
-          }
-          const [minutes, warningMin, highMin] = await Promise.all([
-            this.api.tlm('VEGA', 'DAY_DETAIL', 'MINUTES_JSON'),
-            this.api.tlm('VEGA', 'DAY_DETAIL', 'TONE_WARNING_MIN'),
-            this.api.tlm('VEGA', 'DAY_DETAIL', 'TONE_HIGH_MIN'),
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+        const snap = await this.readPackets(pollSpec)
+        const head = snap[packet]
+        const received = stampOf(head)
+        if (received > stamp && matches(head)) {
+          const body = await this.readPacket(packet, [
+            'RECEIVED_TIMESECONDS',
+            ...payload,
           ])
+          // A newer response displaced ours between the two reads - keep
+          // polling rather than returning a mismatched body.
+          if (stampOf(body) !== received) continue
           return {
-            minutes: minutes || [],
-            toneWarningMin: Number(warningMin ?? 1),
-            toneHighMin: Number(highMin ?? 10),
+            status: Number(head.HTTP_STATUS) || 0,
+            values: { ...head, ...body },
           }
+        }
+        const err = snap[ERROR_PACKET]
+        if (stampOf(err) > errStamp) {
+          const status = Number(err.HTTP_STATUS) || 0
+          const detail = shortErrorBody(err.BODY)
+          const error = new Error(
+            `HTTP ${status} for ${label}${detail ? `: ${detail}` : ''}`,
+          )
+          error.status = status
+          throw error
         }
       }
       throw new Error(
-        `Timed out waiting for ${date} (sent ${Date.now() - sentAt}ms ago)`,
+        `Timed out waiting for ${label} (sent ${Date.now() - sentAt}ms ago)`,
       )
+    },
+
+    // Sends GET_DAY_DETAIL then waits for VEGA DAY_DETAIL to carry a FRESH
+    // response to this exact request (matched by satellite + ground station
+    // + date), since HTTP responses land asynchronously via the interface ->
+    // decom pipeline. HTTP_PATH is overridden to embed the currently-selected
+    // org id - GET_DAY_DETAIL's command definition only bakes in the plugin's
+    // default vega_org_id, so this is what lets the widget query ANY org the
+    // API key has approved access to, not just the one the plugin was
+    // installed with.
+    async fetchDayDetail(satelliteId, groundStationId, date) {
+      const { status, values } = await this.requestPacket({
+        command: 'GET_DAY_DETAIL',
+        params: {
+          HTTP_PATH: `/api/v1/frontend/organizations/${this.selectedOrgId}/forecasting/day_detail`,
+          HTTP_QUERY_SATELLITE_ID: satelliteId,
+          HTTP_QUERY_GROUND_STATION_ID: groundStationId,
+          HTTP_QUERY_DATE: date,
+        },
+        packet: 'DAY_DETAIL',
+        echo: ['SATELLITE_ID', 'GROUND_STATION_ID', 'DATE'],
+        matches: (v) =>
+          Number(v.SATELLITE_ID) === Number(satelliteId) &&
+          Number(v.GROUND_STATION_ID) === Number(groundStationId) &&
+          v.DATE === date,
+        payload: ['MINUTES_JSON', 'TONE_WARNING_MIN', 'TONE_HIGH_MIN'],
+        timeoutMs: 15000,
+        label: date,
+      })
+      if (status >= 300) {
+        throw new Error(`HTTP ${status} for ${date}`)
+      }
+      return {
+        minutes: values.MINUTES_JSON || [],
+        toneWarningMin: Number(values.TONE_WARNING_MIN ?? 1),
+        toneHighMin: Number(values.TONE_HIGH_MIN ?? 10),
+      }
     },
   },
 }
@@ -2688,43 +2850,21 @@ export default {
 .onboarding-cta-ghost:hover {
   background: rgba(79, 195, 247, 0.12);
 }
-.onboarding-key-form {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 16px;
-  max-width: 520px;
-}
-.onboarding-key-input {
-  flex: 1 1 auto;
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  background: rgba(0, 0, 0, 0.25);
-  color: inherit;
+.onboarding-steps {
+  margin: 12px 0 0;
+  padding-left: 22px;
   font-size: 13px;
-  font-family: inherit;
+  line-height: 1.6;
+  opacity: 0.85;
+  max-width: 640px;
 }
-.onboarding-key-input:focus {
-  outline: none;
-  border-color: rgba(79, 195, 247, 0.8);
+.onboarding-steps code {
+  font-size: 12px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(128, 128, 128, 0.2);
 }
-.onboarding-key-save {
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: 1px solid rgba(79, 195, 247, 0.6);
-  background: transparent;
-  color: #4fc3f7;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.onboarding-key-save:disabled {
-  cursor: default;
-  opacity: 0.4;
-}
-.onboarding-key-error {
+.onboarding-error {
   margin-top: 8px;
   font-size: 12px;
   color: #e57373;
