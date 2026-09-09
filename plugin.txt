@@ -1,0 +1,32 @@
+# LANGUAGE ruby
+# Set VARIABLEs here to allow variation in your plugin
+
+VARIABLE vega_hostname admin.vega.space
+  VARIABLE_DESCRIPTION "Hostname of the Vega API"
+VARIABLE vega_port 443
+  VARIABLE_DESCRIPTION "Port for the Vega API"
+VARIABLE vega_protocol https
+  VARIABLE_DESCRIPTION "Protocol for the Vega API (http or https)"
+VARIABLE vega_api_token CHANGE_ME
+  VARIABLE_DESCRIPTION "Vega frontend API key (vgk_... prefix). Create one in the Vega app under your account's API Keys page - NOTE: this is stored as plain plugin config, visible to any COSMOS admin. Rotate/revoke it there if this COSMOS instance is ever decommissioned."
+VARIABLE vega_org_id 0
+  VARIABLE_DESCRIPTION "Organization ID to poll workspace/forecasting data for. Find this by polling VEGA GET_APPROVED_ORGS first (or GET /api/v1/frontend/organization_requests/approved_organizations) and picking an org id your key has approved access to. 0 disables the org-scoped polls."
+VARIABLE vega_poll_period 30
+  VARIABLE_DESCRIPTION "Seconds between polls of each Vega endpoint"
+
+TARGET VEGA VEGA
+  # Decom tlm and cmd data in the time-series database is kept forever by default.
+  # Uncomment to enforce a 30 day retention time. See https://docs.openc3.com/docs/configuration/plugins
+  # CMD_DECOM_RETAIN_TIME 30d
+  # TLM_DECOM_RETAIN_TIME 30d
+
+INTERFACE VEGA_INT http_client_interface.rb <%= vega_hostname %> <%= vega_port %> <%= vega_protocol %> 20.0 20.0
+  MAP_TARGET VEGA
+  OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "VEGA GET_HEALTH"
+  OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "VEGA GET_APPROVED_ORGS"
+<% if vega_org_id.to_i > 0 %>
+  OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "VEGA GET_WORKSPACE"
+  OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "VEGA GET_FORECASTING_SUMMARY"
+<% end %>
+
+WIDGET Timeline

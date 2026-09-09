@@ -1,0 +1,146 @@
+# Telemetry packets for the VEGA target decode JSON responses from the
+# Elara-AI / Vega Space REST API (https://admin.vega.space/api/v1). Each
+# packet uses ACCESSOR HttpAccessor JsonAccessor: HTTP_* items come from the
+# response status/headers (via HttpAccessor), everything else is pulled out
+# of the JSON body by JSONPath (via JsonAccessor, in each item's KEY).
+#
+# Response envelope from the API is {"data": {...}, "meta": {...}}, so most
+# KEYs start with $.data. List endpoints return arrays - for a first pass
+# this exposes a "first record" snapshot (index [0]) since COSMOS telemetry
+# items are fixed-schema. See the plugin README for how to extend this
+# (e.g. one packet per record, or a custom Vue tool) once you know which
+# fields you actually want to watch.
+
+TELEMETRY VEGA HEALTH BIG_ENDIAN "Vega API health check (no auth required)"
+  ACCESSOR HttpAccessor JsonAccessor
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code"
+  APPEND_ITEM STATUS 256 STRING "Health status string, expect 'healthy'"
+    KEY $.status
+  APPEND_ITEM ENVIRONMENT 256 STRING "Deployment environment"
+    KEY $.environment
+  APPEND_ITEM VERSION 256 STRING "Deployed build/commit version"
+    KEY $.version
+  APPEND_ITEM UPTIME_SEC 64 FLOAT "API process uptime in seconds"
+    KEY $.uptime
+
+TELEMETRY VEGA AUTH_ERROR BIG_ENDIAN "Non-2xx response from an authenticated Vega endpoint (bad/expired key, no approved org access, rate limit, etc). Body is NOT parsed as JSON since Vega returns an HTML error page for some error responses - see HTTP_STATUS for the code."
+  ACCESSOR HttpAccessor
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, e.g. 401 = bad/expired key, 403 = no approved access to vega_org_id, 429 = rate limited"
+
+TELEMETRY VEGA APPROVED_ORGS BIG_ENDIAN "Organizations this API key's user has approved access to - use these ids for vega_org_id"
+  ACCESSOR HttpAccessor JsonAccessor
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 401 means the key is bad/expired"
+  APPEND_ITEM FIRST_ORG_ID 32 UINT "Org ID of the first approved organization"
+    KEY $.data.organizations[0].id
+  APPEND_ITEM FIRST_ORG_NAME 256 STRING "Name of the first approved organization"
+    KEY $.data.organizations[0].name
+  APPEND_ITEM FIRST_ORG_SATELLITES_COUNT 32 UINT "Satellite count for the first approved organization"
+    KEY $.data.organizations[0].satellites_count
+  APPEND_ITEM FIRST_ORG_ACCESS_LEVEL 256 STRING "This user's access level (read/write) on the first approved organization"
+    KEY $.data.organizations[0].access_level
+  APPEND_ITEM ORGANIZATIONS_JSON 0 ARRAY "Full organizations array (id, name, satellites_count, access_level, etc) - used by the ForecastTimeline widget's Organization picker"
+    KEY $.data.organizations
+
+TELEMETRY VEGA WORKSPACE BIG_ENDIAN "Satellites and ground stations for the requested org - first-record snapshot"
+  ACCESSOR HttpAccessor JsonAccessor
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
+  APPEND_ITEM ORG_ID 32 UINT "Organization id echoed back - lets a caller confirm this response is for the org it asked about (e.g. via an HTTP_PATH override), since periodic polls to the default vega_org_id keep updating this same packet in the background"
+    KEY $.data.organization.id
+  APPEND_ITEM ORG_NAME 256 STRING "Organization name"
+    KEY $.data.organization.name
+  APPEND_ITEM ORG_SATELLITES_COUNT 32 UINT "Total satellites in this org"
+    KEY $.data.organization.satellites_count
+  APPEND_ITEM FIRST_SAT_NAME 256 STRING "Name of the first satellite"
+    KEY $.data.satellites[0].name
+  APPEND_ITEM FIRST_SAT_NORAD 32 UINT "NORAD catalog number of the first satellite"
+    KEY $.data.satellites[0].norad
+  APPEND_ITEM FIRST_SAT_ORBITAL_CLASS 256 STRING "Orbital class of the first satellite, e.g. LEO/MEO/GEO"
+    KEY $.data.satellites[0].orbital_class
+  APPEND_ITEM FIRST_SAT_ALTITUDE_KM 64 FLOAT "Altitude (km) of the first satellite"
+    KEY $.data.satellites[0].altitude_km
+  APPEND_ITEM FIRST_GS_NAME 256 STRING "Name of the first ground station"
+    KEY $.data.ground_stations[0].name
+  APPEND_ITEM FIRST_GS_LAT 64 FLOAT "Latitude (deg) of the first ground station"
+    KEY $.data.ground_stations[0].lat
+  APPEND_ITEM FIRST_GS_LNG 64 FLOAT "Longitude (deg) of the first ground station"
+    KEY $.data.ground_stations[0].lng
+  APPEND_ITEM SATELLITES_JSON 0 ARRAY "Full satellites array (id, name, norad, bands, orbital_class, etc) - used by the ForecastTimeline widget to populate its satellite picker"
+    KEY $.data.satellites
+  APPEND_ITEM GROUND_STATIONS_JSON 0 ARRAY "Full ground_stations array (id, name, location, lat, lng, etc) - used by the ForecastTimeline widget to populate its ground station rows"
+    KEY $.data.ground_stations
+
+TELEMETRY VEGA FORECASTING_SUMMARY BIG_ENDIAN "Interference/coverage forecast summary for the requested org - forecast run status plus the first satellite's most recent day"
+  ACCESSOR HttpAccessor JsonAccessor
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
+  APPEND_ITEM ORG_ID 32 UINT "Organization id echoed back - lets a caller confirm this response is for the org it asked about (e.g. via an HTTP_PATH override), since periodic polls to the default vega_org_id keep updating this same packet in the background"
+    KEY $.data.organization.id
+  APPEND_ITEM SATELLITES_JSON 0 ARRAY "Full satellites array (id, name, norad, bands, forecast_available, latest_run_id, last_forecast_at, days, etc) - used by the ForecastTimeline widget to sort/disable satellites in its picker by forecast availability"
+    KEY $.data.satellites
+  APPEND_ITEM RUN_STATUS 256 STRING "Forecast run status, e.g. completed"
+    KEY $.data.forecast_run.status
+  APPEND_ITEM RUN_STALE 8 BOOL "Whether the forecast run is stale"
+    KEY $.data.forecast_run.stale
+  APPEND_ITEM FIRST_SAT_NAME 256 STRING "Name of the first satellite in the forecast"
+    KEY $.data.satellites[0].name
+  APPEND_ITEM FIRST_SAT_FORECAST_AVAILABLE 8 BOOL "Whether a forecast is available for the first satellite"
+    KEY $.data.satellites[0].forecast_available
+  APPEND_ITEM FIRST_SAT_DAY_MAX_INTENSITY 32 UINT "Max interference intensity on the first satellite's first forecast day"
+    KEY $.data.satellites[0].days[0].max_intensity
+  APPEND_ITEM FIRST_SAT_DAY_MAX_SEVERITY 256 STRING "Max interference severity on the first satellite's first forecast day, e.g. low/medium/high"
+    KEY $.data.satellites[0].days[0].max_severity
+  APPEND_ITEM FIRST_SAT_DAY_EVENT_COUNT 32 UINT "Interference event count on the first satellite's first forecast day"
+    KEY $.data.satellites[0].days[0].event_count
+
+# On-demand response to GET_DAY_DETAIL - see cmd.txt. This is the real windowed
+# interference data (actual start/end times, not day-level aggregates) that
+# the ForecastTimeline widget renders as colored bar segments, matching the
+# same data the Vega web app itself uses for this view.
+TELEMETRY VEGA DAY_DETAIL BIG_ENDIAN "Interference windows for one satellite+ground_station+day"
+  ACCESSOR HttpAccessor JsonAccessor
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
+  APPEND_ITEM SATELLITE_ID 32 UINT "Satellite id echoed back"
+    KEY $.data.satellite.id
+  APPEND_ITEM SATELLITE_NAME 256 STRING "Satellite name echoed back"
+    KEY $.data.satellite.name
+  APPEND_ITEM GROUND_STATION_ID 32 UINT "Ground station id echoed back"
+    KEY $.data.ground_station.id
+  APPEND_ITEM GROUND_STATION_NAME 256 STRING "Ground station name echoed back"
+    KEY $.data.ground_station.name
+  APPEND_ITEM DATE 256 STRING "Date (YYYY-MM-DD) echoed back"
+    KEY $.data.date
+  APPEND_ITEM BANDS_JSON 0 ARRAY "Frequency bands this satellite operates on"
+    KEY $.data.bands
+  APPEND_ITEM INTERFERENCE_WINDOWS_JSON 0 ARRAY "Array of {id, start_time, end_time, affected_minutes, event_count, max_intensity, max_severity, bands, band_summary} - one entry per contiguous interference window on this day (day-level aggregate, not per-band)"
+    KEY $.data.interference_windows
+  APPEND_ITEM TONE_WARNING_MIN 32 UINT "Per-band interference count at/above which a minute is toned 'warning'"
+    KEY $.data.tone_thresholds.warning_min
+  APPEND_ITEM TONE_HIGH_MIN 32 UINT "Per-band interference count at/above which a minute is toned 'high'"
+    KEY $.data.tone_thresholds.high_min
+  APPEND_ITEM MINUTES_JSON 0 ARRAY "Array of {timestamp, minute, covered, counts: {band: count, ...}} - one entry per minute this day. The ForecastTimeline widget derives per-band interference segments from this (not from INTERFERENCE_WINDOWS_JSON, which is a day-level aggregate across all bands)."
+    KEY $.data.minutes
+
+TELEMETRY VEGA HISTORY BIG_ENDIAN "Measured historical interference for one satellite+ground_station over a time range"
+  ACCESSOR HttpAccessor JsonAccessor
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org, 404 means no coverage runs overlap the requested range"
+  APPEND_ITEM SATELLITE_ID 32 UINT "Satellite id echoed back"
+    KEY $.data.satellite.id
+  APPEND_ITEM SATELLITE_NAME 256 STRING "Satellite name echoed back"
+    KEY $.data.satellite.name
+  APPEND_ITEM GROUND_STATION_ID 32 UINT "Ground station id echoed back"
+    KEY $.data.ground_station.id
+  APPEND_ITEM GROUND_STATION_NAME 256 STRING "Ground station name echoed back"
+    KEY $.data.ground_station.name
+  APPEND_ITEM START_TIME 256 STRING "Range start echoed back (ISO8601)"
+    KEY $.data.start_time
+  APPEND_ITEM END_TIME 256 STRING "Range end echoed back (ISO8601)"
+    KEY $.data.end_time
+  APPEND_ITEM FREQUENCY_BAND 64 STRING "Band filter applied ('all' = combined across bands)"
+    KEY $.data.frequency_band
+  APPEND_ITEM VISIBLE_PASSES 32 UINT "Number of minutes in the range where the satellite was visible from the ground station"
+    KEY $.data.visible_passes
+  APPEND_ITEM COVERAGE_RUNS_JSON 0 ARRAY "Run provenance: array of {coverage_analysis_run_id, start_time, end_time, source (postgresql|r2), grid, resolution} - which coverage run served each stitched segment"
+    KEY $.data.coverage_analysis_runs
+  APPEND_ITEM COVERAGE_GAPS_JSON 0 ARRAY "Array of {start_time, end_time} intervals no completed run covers - genuinely unknown, distinct from zero interference"
+    KEY $.data.coverage_gaps
+  APPEND_ITEM TIMESERIES_JSON 0 ARRAY "Array of {timestamp, intensity, counts: {band: n, ...}} - one entry per visible minute (counts is the per-band breakdown, intensity the combined aggregate); minutes not present were not visible from this ground station (interference zero by definition)"
+    KEY $.data.timeseries
