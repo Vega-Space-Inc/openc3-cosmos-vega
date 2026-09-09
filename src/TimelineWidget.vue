@@ -3112,9 +3112,6 @@ export default {
 .lane-plot.expanded {
   height: 220px;
 }
-.lane-plot.hovered {
-  background: rgba(255, 255, 255, 0.035);
-}
 .hover-tooltip-row-active {
   font-weight: 700;
 }
