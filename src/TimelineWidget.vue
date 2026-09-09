@@ -282,18 +282,6 @@
         </div>
       </div>
 
-      <div v-if="selectedSatellite" class="satellite-header">
-        <div class="satellite-name">
-          {{ selectedSatellite.name }}
-          <span v-if="selectedGroundStation" class="ground-station-name">
-            · {{ selectedGroundStation.name }}</span
-          >
-          <span v-if="selectedOrg" class="org-name">
-            · {{ selectedOrg.name }}</span
-          >
-        </div>
-      </div>
-
       <!-- Toolbar spanning the chart's width: previous-day arrow at the
            chart's left edge, next-day at its right, the window's date
            centred between them (with Today / Reset zoom / the telemetry
@@ -2734,23 +2722,6 @@ export default {
   font-size: 12px;
   color: #e57373;
 }
-.satellite-header {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.satellite-name {
-  font-size: 18px;
-  font-weight: 500;
-}
-.ground-station-name {
-  font-weight: 400;
-  opacity: 0.75;
-}
-.org-name {
-  font-weight: 400;
-  opacity: 0.55;
-}
 
 // Band toggle chips are plain text now that colour encodes severity rather
 // than band; the ramp legend next to them explains the slice colours
@@ -3000,7 +2971,7 @@ export default {
   display: flex;
 }
 .lanes-labels {
-  width: 64px;
+  width: 48px;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -3013,8 +2984,8 @@ export default {
   /* bottom-aligned so the name sits on the lane's zero baseline, where the
      trace actually lives, instead of floating mid-lane */
   align-items: flex-end;
-  justify-content: flex-end;
-  padding-right: 8px;
+  justify-content: flex-start;
+  padding-right: 6px;
   padding-bottom: 3px;
   cursor: pointer;
   transition: height 0.15s ease;
@@ -3089,7 +3060,7 @@ export default {
   height: 16px;
 }
 .x-axis-spacer {
-  width: 64px; /* .lanes-labels */
+  width: 48px; /* .lanes-labels */
   flex: none;
 }
 .x-axis-row .x-axis {
@@ -3103,9 +3074,6 @@ export default {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  /* Indented past the lane labels so the arrows sit on the chart's own
-     edges and the date centres over the plot */
-  margin-left: 64px;
   margin-bottom: 6px;
 }
 .window-nav-center {
