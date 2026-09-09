@@ -14,7 +14,7 @@
 # an installed openc3-cosmos-vega and upgrades it, keeping vars.json's values.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VERSION="${1:-0.47.0.$(date +%Y%m%d%H%M)}"
+VERSION="${1:-0.47.0.$(date +%Y%m%d%H%M%S)}"
 API="${OPENC3_API_CONTAINER:-cosmos-openc3-cosmos-cmd-tlm-api-1}"
 OWNER="$(docker exec "$API" stat -c %u:%g /gems/cosmoscache)"
 GEM="openc3-cosmos-vega-$VERSION.gem"
