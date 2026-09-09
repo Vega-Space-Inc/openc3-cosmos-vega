@@ -142,7 +142,6 @@
             :items="orgOptions"
             item-title="label"
             item-value="id"
-            label="Organization"
             density="compact"
             hide-details
             variant="outlined"
@@ -154,7 +153,6 @@
             :items="satelliteOptions"
             item-title="label"
             item-value="id"
-            label="Satellite"
             density="compact"
             hide-details
             variant="outlined"
@@ -166,7 +164,6 @@
             :items="groundStationOptions"
             item-title="label"
             item-value="id"
-            label="Ground Station"
             density="compact"
             hide-details
             variant="outlined"
@@ -298,28 +295,40 @@
           <v-btn :value="0" :disabled="loading" size="small">Today</v-btn>
           <v-btn :value="1" :disabled="loading" size="small">Tomorrow</v-btn>
         </v-btn-toggle>
-        <v-select
-          :model-value="windowOffsetDays"
-          :items="dayOptions"
-          item-title="label"
-          item-value="offset"
-          density="compact"
-          hide-details
-          variant="outlined"
-          class="day-select"
-          :disabled="loading"
-          @update:model-value="setWindowOffset"
-        >
-          <template #item="{ props, item }">
-            <v-list-item v-bind="props" :title="item.raw.label">
+        <!-- Calendar: a compact icon button opening a short list - the last
+             four days and the next three - with today and the selected day
+             marked and days past the forecast horizon greyed out. -->
+        <v-menu location="bottom start">
+          <template #activator="{ props }">
+            <button
+              type="button"
+              class="cal-btn"
+              :disabled="loading"
+              v-bind="props"
+              :title="`${days[0].weekday} ${days[0].display}`"
+            >
+              <v-icon size="18">mdi-calendar</v-icon>
+              <span class="cal-btn-date">{{ days[0].display }}</span>
+            </button>
+          </template>
+          <v-list density="compact" class="cal-list">
+            <v-list-item
+              v-for="d in calendarDays"
+              :key="'cal-' + d.offset"
+              :active="d.offset === windowOffsetDays"
+              :disabled="d.disabled"
+              @click="setWindowOffset(d.offset)"
+            >
+              <v-list-item-title>
+                <span class="cal-weekday">{{ d.weekday }}</span>
+                {{ d.display }}
+              </v-list-item-title>
               <template #append>
-                <span class="day-kind" :class="item.raw.kind">
-                  {{ item.raw.kind }}
-                </span>
+                <span class="day-kind" :class="d.kind">{{ d.kindLabel }}</span>
               </template>
             </v-list-item>
-          </template>
-        </v-select>
+          </v-list>
+        </v-menu>
         <div class="window-nav-right">
           <button
             v-if="zoomRange"
@@ -1102,19 +1111,24 @@ export default {
       }
       return result
     },
-    // Every day the picker offers, newest first: the forecast days, today,
-    // then the measured-history days going back.
-    dayOptions() {
-      const options = []
-      for (let o = MAX_FORWARD_OFFSET; o >= -MAX_BACK_DAYS; o--) {
+    // The calendar menu's rows: the last four days through the next three,
+    // oldest first. Days beyond the forecast horizon are listed but
+    // disabled, so the horizon is visible rather than a surprise.
+    calendarDays() {
+      const rows = []
+      for (let o = -4; o <= 3; o++) {
         const d = this.dayInfo(o)
-        options.push({
+        const disabled = o > MAX_FORWARD_OFFSET || o < -MAX_BACK_DAYS
+        const kind = o < 0 ? 'past' : o === 0 ? 'today' : 'forecast'
+        rows.push({
+          ...d,
           offset: o,
-          label: `${d.weekday} ${d.display}`,
-          kind: o < 0 ? 'past' : o === 0 ? 'today' : 'forecast',
+          kind,
+          disabled,
+          kindLabel: disabled ? 'no forecast yet' : kind,
         })
       }
-      return options
+      return rows
     },
     // The Yesterday / Today / Tomorrow toggle: reflects the window when it
     // is on one of those days, nothing selected otherwise.
@@ -3275,11 +3289,49 @@ export default {
   gap: 8px;
 }
 .quick-days {
-  height: 36px;
+  /* Match the outlined compact fields beside it: same height, border,
+     radius and text treatment */
+  height: 40px;
+  border: thin solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
 }
-.day-select {
-  max-width: 220px;
-  flex: none;
+.quick-days .v-btn {
+  height: 100% !important;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 14px;
+  font-weight: 400;
+  padding: 0 16px;
+}
+.cal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border: thin solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+}
+.cal-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.cal-btn-date {
+  opacity: 0.85;
+}
+.cal-list {
+  min-width: 240px;
+}
+.cal-weekday {
+  display: inline-block;
+  width: 3.2em;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
 }
 .day-kind {
   font-size: 10px;
