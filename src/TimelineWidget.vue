@@ -399,7 +399,7 @@
                   v-for="tick in expandedYTicks"
                   :key="'lane-tick-' + tick.value"
                   class="lane-tick"
-                  :style="{ bottom: tick.pct + '%' }"
+                  :style="{ bottom: tick.pct / (1 + LANE_HEADROOM) + '%' }"
                 >
                   {{ tick.value }}
                 </div>
@@ -429,7 +429,7 @@
               </div>
               <svg
                 class="lane-svg"
-                :viewBox="`${viewStart} 0 ${viewEnd - viewStart} ${CHART_H}`"
+                :viewBox="`${viewStart} ${-CHART_H * LANE_HEADROOM} ${viewEnd - viewStart} ${CHART_H * (1 + LANE_HEADROOM)}`"
                 preserveAspectRatio="none"
               >
                 <!-- One path per ramp step, each a run of narrow rects
@@ -570,12 +570,10 @@
               v-for="mark in axisMarks"
               :key="'mark-' + mark.c"
               class="hour-mark"
+              :class="{ 'hour-mark-end': mark.end }"
               :style="{ left: cToPct(mark.c) + '%' }"
             >
               {{ mark.label }}
-            </span>
-            <span class="day-label" style="left: 50%">
-              {{ days[0].weekday }} {{ days[0].display }}
             </span>
           </div>
         </div>
@@ -650,6 +648,60 @@ const MONTHS = [
 // viewStart..viewEnd, in minutes - zooming just narrows this window, it
 // never touches the underlying path data.
 const CHART_H = 220
+// Empty space kept above a lane's tallest slice, as a fraction of CHART_H,
+// so a band at its peak never runs into the lane above it.
+const LANE_HEADROOM = 0.14
+
+// --- Time zone ---
+// The chart follows the COSMOS 'time_zone' setting (Admin / Settings), the
+// same one the top-bar clock uses: 'local' (the browser's zone), 'UTC', or
+// an IANA zone name. Days are that zone's calendar days (midnight to
+// midnight there), and every label is rendered in it. Vega's API is queried
+// by UTC date, so a display day is stitched from the one or two UTC days
+// that overlap it (see utcFetchDays).
+const partsFormatters = {}
+function zoneParts(ms, tz) {
+  const key = tz || 'local'
+  let fmt = partsFormatters[key]
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: key === 'local' ? undefined : key,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      weekday: 'short',
+    })
+    partsFormatters[key] = fmt
+  }
+  const p = {}
+  for (const part of fmt.formatToParts(new Date(ms))) p[part.type] = part.value
+  return {
+    y: Number(p.year),
+    m: Number(p.month) - 1,
+    d: Number(p.day),
+    hh: Number(p.hour) % 24,
+    mm: Number(p.minute),
+    wd: String(p.weekday).slice(0, 3).toUpperCase(),
+  }
+}
+// Minutes the zone is ahead of UTC at the given instant.
+function zoneOffsetMin(ms, tz) {
+  const p = zoneParts(ms, tz)
+  return (Date.UTC(p.y, p.m, p.d, p.hh, p.mm) - Math.floor(ms / 60000) * 60000) / 60000
+}
+// Epoch ms of midnight on the zone's calendar day (y, m, d). Two passes so
+// a DST change between the guess and the answer is absorbed.
+function zoneMidnightMs(y, m, d, tz) {
+  const guess = Date.UTC(y, m, d)
+  const first = guess - zoneOffsetMin(guess, tz) * 60000
+  return guess - zoneOffsetMin(first, tz) * 60000
+}
+function pad2(n) {
+  return String(n).padStart(2, '0')
+}
 // Colour ramp. Each slice is coloured by its interferer count RELATIVE to
 // the band's own peak in the loaded window - green (quiet) through amber to
 // red (the band's worst minute) - the same continuous low -> high strip the
@@ -818,7 +870,10 @@ export default {
   data() {
     return {
       CHART_H,
+      LANE_HEADROOM,
       RAMP_COLORS,
+      // COSMOS 'time_zone' setting - see the Time zone block up top.
+      timeZone: 'local',
       // CSS px width of the lanes area, kept current by a ResizeObserver;
       // drives how many minutes each slice covers (see slotMinutes).
       laneWidthPx: 0,
@@ -1032,24 +1087,39 @@ export default {
     // relative to today. `past` days are filled by GET_HISTORY (measured,
     // per-band); today and forecast days by GET_DAY_DETAIL.
     days() {
+      const tz = this.timeZone
       const result = []
-      const today = new Date()
+      const now = zoneParts(Date.now(), tz)
       for (let i = 0; i < WINDOW_DAYS; i++) {
         const offset = this.windowOffsetDays + i
-        const d = new Date(
-          Date.UTC(
-            today.getUTCFullYear(),
-            today.getUTCMonth(),
-            today.getUTCDate() + offset,
-          ),
-        )
-        const date = d.toISOString().slice(0, 10)
+        const startMs = zoneMidnightMs(now.y, now.m, now.d + offset, tz)
+        // Noon is safely inside the day whatever DST does at its edges.
+        const p = zoneParts(startMs + 12 * 3600000, tz)
         result.push({
-          date,
-          weekday: WEEKDAYS[d.getUTCDay()],
-          display: `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`,
+          date: `${p.y}-${pad2(p.m + 1)}-${pad2(p.d)}`,
+          startMs,
+          weekday: p.wd,
+          display: `${MONTHS[p.m]} ${p.d}`,
           past: offset < 0,
         })
+      }
+      return result
+    },
+    // The UTC calendar days Vega must be asked for to cover the display
+    // window - one, or two when the zone's midnight isn't UTC's. 'past'
+    // (measured history vs. forecast) is decided per UTC day, since that is
+    // how the API splits them.
+    utcFetchDays() {
+      const start = this.day0StartMs
+      const end = start + this.totalMinutes * 60000
+      const todayUtc = new Date().toISOString().slice(0, 10)
+      const s = new Date(start)
+      let t = Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate())
+      const result = []
+      while (t < end) {
+        const date = new Date(t).toISOString().slice(0, 10)
+        result.push({ date, past: date < todayUtc })
+        t += 86400000
       }
       return result
     },
@@ -1063,19 +1133,20 @@ export default {
       return this.days.length * 1440
     },
     day0StartMs() {
-      return new Date(`${this.days[0].date}T00:00:00Z`).getTime()
+      return this.days[0].startMs
     },
     // Lookup: absolute minute index -> that minute's data entry (or null).
     minuteEntries() {
       const map = new Array(this.totalMinutes).fill(null)
-      this.days.forEach((day, dayIdx) => {
-        const dayData = this.dayDataByDate[day.date]
-        if (!dayData) return
+      const start = this.day0StartMs
+      for (const dayData of Object.values(this.dayDataByDate)) {
         for (const entry of dayData.minutes || []) {
-          const m = Math.round(this.minutesInDay(entry.timestamp, day.date))
-          if (m >= 0 && m < 1440) map[dayIdx * 1440 + m] = entry
+          const idx = Math.round(
+            (new Date(entry.timestamp).getTime() - start) / 60000,
+          )
+          if (idx >= 0 && idx < map.length) map[idx] = entry
         }
-      })
+      }
       return map
     },
     // Contiguous covered spans (passes), padded by PASS_PAD_MIN each side
@@ -1175,6 +1246,14 @@ export default {
             label: this.formatHM(this.idxToDate(idx)),
           })
         }
+        // Close the axis at the right edge. A whole day ends at the next
+        // midnight, which reads better as 24:00 than 00:00.
+        const endLabel = this.formatHM(this.idxToDate(seg.endIdx))
+        marks.push({
+          c: seg.cstart + seg.clen,
+          label: endLabel === '00:00' ? '24:00' : endLabel,
+          end: true,
+        })
         return marks
       }
       return segs.map((s) => ({ c: s.cstart + s.clen / 2, label: s.label }))
@@ -1188,14 +1267,10 @@ export default {
       const result = {}
       for (const band of this.bands) {
         let max = 0
-        for (const day of this.days) {
-          const dayData = this.dayDataByDate[day.date]
-          if (!dayData) continue
-          for (const entry of dayData.minutes || []) {
-            if (!entry.covered) continue
-            const c = (entry.counts && entry.counts[band]) || 0
-            if (c > max) max = c
-          }
+        for (const entry of this.minuteEntries) {
+          if (!entry || !entry.covered) continue
+          const c = (entry.counts && entry.counts[band]) || 0
+          if (c > max) max = c
         }
         result[band] = this.niceMax(max)
       }
@@ -1311,7 +1386,6 @@ export default {
       const dayIdx = Math.floor(this.hoverIdx / 1440)
       const day = this.days[dayIdx]
       if (!day) return null
-      if (!this.dayDataByDate[day.date]) return null
       const entry = this.minuteEntries[this.hoverIdx]
       if (!entry) return null
       // With per-band lanes, the tooltip shows only the hovered lane's band
@@ -1492,6 +1566,13 @@ export default {
     this._forecastGen = 0
     // Per-(satellite, station, day) response cache - see loadForecast.
     this._dayCache = {}
+    // Same setting the top-bar clock reads, so the chart and the clock agree.
+    try {
+      const tz = await this.api.get_setting('time_zone')
+      if (tz) this.timeZone = tz
+    } catch (e) {
+      // keep the default ('local')
+    }
     await this.checkIntegration()
     // Telemetry overlay is COSMOS-local, so it works even when the Vega
     // integration isn't connected yet.
@@ -1875,9 +1956,6 @@ export default {
       if (abs >= 10) return v.toFixed(1)
       return Number(v.toPrecision(3)).toString()
     },
-    dayIdxOf(day) {
-      return this.days.findIndex((d) => d.date === day.date)
-    },
     // Compressed-coordinate helpers (see the PASS_GAP_UNITS block up top).
     idxToC(idx) {
       for (const seg of this.segments) {
@@ -1911,12 +1989,8 @@ export default {
       return new Date(this.day0StartMs + idx * 60000)
     },
     formatHM(date) {
-      return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`
-    },
-    minutesInDay(isoTime, date) {
-      const t = new Date(isoTime).getTime()
-      const dayStart = new Date(`${date}T00:00:00Z`).getTime()
-      return (t - dayStart) / 60000
+      const p = zoneParts(date.getTime(), this.timeZone)
+      return `${pad2(p.hh)}:${pad2(p.mm)}`
     },
     // Rounds a raw max up to a "nice" round number (1/2/5 x10^n) so y-axis
     // ticks land on sensible values instead of awkward fractions.
@@ -2241,7 +2315,7 @@ export default {
       const missingPast = []
       const missingForecast = []
       const nowMs = Date.now()
-      for (const day of this.days) {
+      for (const day of this.utcFetchDays) {
         const hit = this._dayCache[this.dayCacheKey(satId, gsId, day)]
         const fresh =
           hit && (day.past || nowMs - hit.at < FORECAST_CACHE_TTL_MS)
@@ -3012,7 +3086,7 @@ export default {
 }
 .x-axis-row {
   display: flex;
-  height: 34px;
+  height: 16px;
 }
 .x-axis-spacer {
   width: 64px; /* .lanes-labels */
@@ -3167,13 +3241,8 @@ export default {
   opacity: 0.45;
   white-space: nowrap;
 }
-.day-label {
-  position: absolute;
-  top: 18px;
-  transform: translateX(-50%);
-  font-size: 11px;
-  opacity: 0.7;
-  white-space: nowrap;
+.hour-mark-end {
+  transform: translateX(-100%);
 }
 
 // Empty state: no working Vega connection yet
