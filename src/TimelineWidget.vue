@@ -367,23 +367,6 @@
            its shape), on the green -> amber -> red ramp. Collapsed lanes are
            numberless; clicking one expands it with that band's tick values. -->
       <div v-if="days.length && bands.length" class="lanes-wrap">
-        <!-- Current time, sitting above the grid on the "now" line -->
-        <div class="now-row">
-          <div class="x-axis-spacer" />
-          <div class="now-track">
-            <span
-              v-if="
-                nowMarkerC !== null &&
-                nowMarkerC > viewStart &&
-                nowMarkerC < viewEnd
-              "
-              class="now-time"
-              :style="{ left: cToPct(nowMarkerC) + '%' }"
-            >
-              {{ nowLabel }}
-            </span>
-          </div>
-        </div>
         <!-- Pass numbers, centred over their boxes -->
         <div v-if="passMarks.length" class="pass-row">
           <div class="x-axis-spacer" />
@@ -396,15 +379,6 @@
             >
               {{ m.label }}
             </span>
-            <div
-              v-if="
-                nowMarkerC !== null &&
-                nowMarkerC > viewStart &&
-                nowMarkerC < viewEnd
-              "
-              class="now-line"
-              :style="{ left: cToPct(nowMarkerC) + '%' }"
-            />
           </div>
         </div>
         <div class="lanes-body" @mouseleave="hoverBand = null">
@@ -448,69 +422,73 @@
               class="cell-highlight"
               :style="hoverCell.style"
             />
-            <div
-              v-for="band in visibleBandList"
-              :key="'lane-' + band"
-              class="lane-plot"
-              :class="{
-                expanded: expandedBand === band,
-                hovered: hoverBand === band,
-              }"
-              @mouseenter="hoverBand = band"
-              @click="onCellClick(band, $event)"
-            >
-              <div v-if="expandedBand === band" class="lane-title">
-                {{ band }} · ASI Risk
-              </div>
-              <svg
-                class="lane-svg"
-                :viewBox="`${viewStart} ${-CHART_H * LANE_HEADROOM} ${viewEnd - viewStart} ${CHART_H * (1 + LANE_HEADROOM)}`"
-                preserveAspectRatio="none"
+            <div class="lanes-stack">
+              <div
+                v-for="band in visibleBandList"
+                :key="'lane-' + band"
+                class="lane-plot"
+                :class="{
+                  expanded: expandedBand === band,
+                  hovered: hoverBand === band,
+                }"
+                @mouseenter="hoverBand = band"
+                @click="onCellClick(band, $event)"
               >
-                <!-- One path per ramp step, each a run of narrow rects
+                <div v-if="expandedBand === band" class="lane-title">
+                  {{ band }} · ASI Risk
+                </div>
+                <svg
+                  class="lane-svg"
+                  :viewBox="`${viewStart} ${-CHART_H * LANE_HEADROOM} ${viewEnd - viewStart} ${CHART_H * (1 + LANE_HEADROOM)}`"
+                  preserveAspectRatio="none"
+                >
+                  <!-- One path per ramp step, each a run of narrow rects
                      rising from the baseline with a gap between neighbours.
                      The viewBox does the horizontal scaling on zoom. -->
-                <g :opacity="hoverBand && hoverBand !== band ? 0.3 : 1">
-                  <g
-                    :opacity="
-                      (hoverSlices && hoverBand === band) || dragBars
-                        ? 0.35
-                        : 1
-                    "
-                  >
-                    <path
-                      v-for="(d, step) in bandBars[band]"
-                      :key="step"
-                      :d="d"
-                      :fill="RAMP_COLORS[step]"
-                      stroke="none"
-                    />
-                  </g>
-                  <!-- While drag-zooming, the slices inside the selection
+                  <g :opacity="hoverBand && hoverBand !== band ? 0.3 : 1">
+                    <g
+                      :opacity="
+                        (hoverSlices && hoverBand === band) || dragBars
+                          ? 0.35
+                          : 1
+                      "
+                    >
+                      <path
+                        v-for="(d, step) in bandBars[band]"
+                        :key="step"
+                        :d="d"
+                        :fill="RAMP_COLORS[step]"
+                        stroke="none"
+                      />
+                    </g>
+                    <!-- While drag-zooming, the slices inside the selection
                        are redrawn at full strength over the dimmed lane so
                        it is clear exactly what the zoom will keep. -->
-                  <template v-if="dragBars">
-                    <path
-                      v-for="(d, step) in dragBars[band]"
-                      :key="'drag-' + step"
-                      :d="d"
-                      :fill="RAMP_COLORS[step]"
-                      stroke="none"
-                    />
-                  </template>
-                  <!-- The hovered slice, redrawn at full strength over the
+                    <template v-if="dragBars">
+                      <path
+                        v-for="(d, step) in dragBars[band]"
+                        :key="'drag-' + step"
+                        :d="d"
+                        :fill="RAMP_COLORS[step]"
+                        stroke="none"
+                      />
+                    </template>
+                    <!-- The hovered slice, redrawn at full strength over the
                        dimmed lane so it is unmistakable which bar the
                        tooltip describes. -->
-                  <path
-                    v-if="hoverSlices && hoverBand === band && hoverSlices[band]"
-                    :d="hoverSlices[band].d"
-                    :fill="hoverSlices[band].color"
-                    stroke="rgba(255, 255, 255, 0.9)"
-                    stroke-width="1"
-                    vector-effect="non-scaling-stroke"
-                  />
-                </g>
-              </svg>
+                    <path
+                      v-if="
+                        hoverSlices && hoverBand === band && hoverSlices[band]
+                      "
+                      :d="hoverSlices[band].d"
+                      :fill="hoverSlices[band].color"
+                      stroke="rgba(255, 255, 255, 0.9)"
+                      stroke-width="1"
+                      vector-effect="non-scaling-stroke"
+                    />
+                  </g>
+                </svg>
+              </div>
             </div>
             <!-- One outlined cell per (pass, band), laid out to match the
                  lane rows exactly, so the chart reads as a grid with the
@@ -757,7 +735,10 @@ function zoneParts(ms, tz) {
 // Minutes the zone is ahead of UTC at the given instant.
 function zoneOffsetMin(ms, tz) {
   const p = zoneParts(ms, tz)
-  return (Date.UTC(p.y, p.m, p.d, p.hh, p.mm) - Math.floor(ms / 60000) * 60000) / 60000
+  return (
+    (Date.UTC(p.y, p.m, p.d, p.hh, p.mm) - Math.floor(ms / 60000) * 60000) /
+    60000
+  )
 }
 // Epoch ms of midnight on the zone's calendar day (y, m, d). Two passes so
 // a DST change between the guess and the answer is absorbed.
@@ -1217,9 +1198,6 @@ export default {
     nowIdx() {
       return (this.nowMs - this.day0StartMs) / 60000
     },
-    nowLabel() {
-      return this.formatHM(new Date(this.nowMs))
-    },
     totalMinutes() {
       return this.days.length * 1440
     },
@@ -1355,7 +1333,9 @@ export default {
           const hm = this.formatHM(this.idxToDate(idx))
           return idx === seg.endIdx && hm === '00:00' ? '24:00' : hm
         }
-        const marks = [{ c: vStart, label: labelAt(toIdx(vStart)), align: 'start' }]
+        const marks = [
+          { c: vStart, label: labelAt(toIdx(vStart)), align: 'start' },
+        ]
         const first = Math.ceil(toIdx(vStart) / interval) * interval
         for (let idx = first; idx < toIdx(vEnd); idx += interval) {
           const c = seg.cstart + (idx - seg.startIdx)
@@ -1461,9 +1441,7 @@ export default {
     hoverSlot() {
       const idx = this.hoverIdx
       if (idx === null) return null
-      const seg = this.segments.find(
-        (s) => idx >= s.startIdx && idx < s.endIdx,
-      )
+      const seg = this.segments.find((s) => idx >= s.startIdx && idx < s.endIdx)
       if (!seg) return null
       const slot = this.slotMinutes
       const start =
@@ -1869,7 +1847,9 @@ export default {
         // interface protocol drops authenticated requests outright (it has
         // nothing to sign them with unless the VEGA_API_KEY secret exists),
         // so silence means "no key", not "Vega is down".
-        this.setIntegrationState(this.savedApiKey ? 'unavailable' : 'missing_key')
+        this.setIntegrationState(
+          this.savedApiKey ? 'unavailable' : 'missing_key',
+        )
       } catch (e) {
         this.setIntegrationState('unavailable')
         this.integrationCheckError = `Could not check the Vega connection: ${e.message}`
@@ -1962,8 +1942,11 @@ export default {
       const rect = this.$refs.plot && this.$refs.plot.getBoundingClientRect()
       if (e && rect && rect.width) {
         const px = Math.min(Math.max(e.clientX - rect.left, 0), rect.width)
-        const c = this.viewStart + (px / rect.width) * (this.viewEnd - this.viewStart)
-        seg = this.segments.find((s) => c >= s.cstart && c < s.cstart + s.clen) || null
+        const c =
+          this.viewStart + (px / rect.width) * (this.viewEnd - this.viewStart)
+        seg =
+          this.segments.find((s) => c >= s.cstart && c < s.cstart + s.clen) ||
+          null
       }
       if (!seg) {
         this.expandedBand = this.expandedBand === band ? null : band
@@ -3507,24 +3490,6 @@ export default {
   width: 0;
   border-left: 1px dashed rgba(255, 255, 255, 0.35);
   pointer-events: none;
-}
-.now-row {
-  display: flex;
-  height: 16px;
-}
-.now-track {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-}
-.now-time {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  opacity: 0.7;
-  white-space: nowrap;
 }
 .hover-tooltip {
   position: absolute;
