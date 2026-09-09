@@ -282,42 +282,45 @@
         </div>
       </div>
 
-      <!-- Toolbar spanning the chart's width: previous-day arrow at the
-           chart's left edge, next-day at its right, the window's date
-           centred between them (with Today / Reset zoom / the telemetry
-           overlay toggle beside it when relevant). -->
+      <!-- Day picker: Yesterday / Today / Tomorrow shortcuts, plus a
+           dropdown of every day on offer (30 days of measured history back,
+           the 72h forecast forward), each tagged past / today / forecast.
+           Reset zoom and the telemetry overlay toggle sit on the right. -->
       <div class="window-nav">
-        <v-tooltip location="top" text="Previous day">
-          <template #activator="{ props }">
-            <button
-              type="button"
-              class="window-nav-btn"
-              :disabled="loading || windowOffsetDays <= -MAX_BACK_DAYS"
-              v-bind="props"
-              @click="shiftWindow(-1)"
-            >
-              <v-icon size="18">mdi-chevron-left</v-icon>
-            </button>
+        <v-btn-toggle
+          v-model="quickDay"
+          density="compact"
+          variant="outlined"
+          divided
+          class="quick-days"
+        >
+          <v-btn :value="-1" :disabled="loading" size="small">Yesterday</v-btn>
+          <v-btn :value="0" :disabled="loading" size="small">Today</v-btn>
+          <v-btn :value="1" :disabled="loading" size="small">Tomorrow</v-btn>
+        </v-btn-toggle>
+        <v-select
+          :model-value="windowOffsetDays"
+          :items="dayOptions"
+          item-title="label"
+          item-value="offset"
+          density="compact"
+          hide-details
+          variant="outlined"
+          class="day-select"
+          :disabled="loading"
+          @update:model-value="setWindowOffset"
+        >
+          <template #item="{ props, item }">
+            <v-list-item v-bind="props" :title="item.raw.label">
+              <template #append>
+                <span class="day-kind" :class="item.raw.kind">
+                  {{ item.raw.kind }}
+                </span>
+              </template>
+            </v-list-item>
           </template>
-        </v-tooltip>
-        <div class="window-nav-center">
-          <span class="window-nav-date">
-            <template v-if="days.length === 1">
-              {{ days[0].weekday }} {{ days[0].display }}
-            </template>
-            <template v-else>
-              {{ days[0].display }} – {{ days[days.length - 1].display }}
-            </template>
-          </span>
-          <button
-            v-if="windowOffsetDays !== DEFAULT_WINDOW_OFFSET"
-            type="button"
-            class="window-nav-btn window-nav-today"
-            :disabled="loading"
-            @click="shiftWindow(DEFAULT_WINDOW_OFFSET - windowOffsetDays)"
-          >
-            Today
-          </button>
+        </v-select>
+        <div class="window-nav-right">
           <button
             v-if="zoomRange"
             type="button"
@@ -346,19 +349,6 @@
             {{ tlmTarget }} {{ tlmItem }}
           </button>
         </div>
-        <v-tooltip location="top" text="Next day">
-          <template #activator="{ props }">
-            <button
-              type="button"
-              class="window-nav-btn"
-              :disabled="loading || windowOffsetDays >= MAX_FORWARD_OFFSET"
-              v-bind="props"
-              @click="shiftWindow(1)"
-            >
-              <v-icon size="18">mdi-chevron-right</v-icon>
-            </button>
-          </template>
-        </v-tooltip>
       </div>
 
       <!-- Per-band lanes: operators care whether THEIR band is clear, not
@@ -1106,23 +1096,37 @@ export default {
     // relative to today. `past` days are filled by GET_HISTORY (measured,
     // per-band); today and forecast days by GET_DAY_DETAIL.
     days() {
-      const tz = this.timeZone
       const result = []
-      const now = zoneParts(Date.now(), tz)
       for (let i = 0; i < WINDOW_DAYS; i++) {
-        const offset = this.windowOffsetDays + i
-        const startMs = zoneMidnightMs(now.y, now.m, now.d + offset, tz)
-        // Noon is safely inside the day whatever DST does at its edges.
-        const p = zoneParts(startMs + 12 * 3600000, tz)
-        result.push({
-          date: `${p.y}-${pad2(p.m + 1)}-${pad2(p.d)}`,
-          startMs,
-          weekday: p.wd,
-          display: `${MONTHS[p.m]} ${p.d}`,
-          past: offset < 0,
-        })
+        result.push(this.dayInfo(this.windowOffsetDays + i))
       }
       return result
+    },
+    // Every day the picker offers, newest first: the forecast days, today,
+    // then the measured-history days going back.
+    dayOptions() {
+      const options = []
+      for (let o = MAX_FORWARD_OFFSET; o >= -MAX_BACK_DAYS; o--) {
+        const d = this.dayInfo(o)
+        options.push({
+          offset: o,
+          label: `${d.weekday} ${d.display}`,
+          kind: o < 0 ? 'past' : o === 0 ? 'today' : 'forecast',
+        })
+      }
+      return options
+    },
+    // The Yesterday / Today / Tomorrow toggle: reflects the window when it
+    // is on one of those days, nothing selected otherwise.
+    quickDay: {
+      get() {
+        const o = this.windowOffsetDays
+        return o >= -1 && o <= 1 ? o : null
+      },
+      set(v) {
+        if (v === null || v === undefined) return
+        this.setWindowOffset(v)
+      },
     },
     // The UTC calendar days Vega must be asked for to cover the display
     // window - one, or two when the zone's midnight isn't UTC's. 'past'
@@ -1272,22 +1276,25 @@ export default {
             break
           }
         }
-        const marks = []
-        const first = Math.ceil(seg.startIdx / interval) * interval
-        for (let idx = first; idx < seg.endIdx; idx += interval) {
-          marks.push({
-            c: seg.cstart + (idx - seg.startIdx),
-            label: this.formatHM(this.idxToDate(idx)),
-          })
+        // Only the ticks inside the (possibly zoomed) window, with the two
+        // edges always labelled: the first tick flush left, the last flush
+        // right. A tick within a quarter-interval of an edge is dropped so
+        // it can't collide with the edge label.
+        const vStart = this.viewStart
+        const vEnd = this.viewEnd
+        const toIdx = (c) => seg.startIdx + (c - seg.cstart)
+        const labelAt = (idx) => {
+          const hm = this.formatHM(this.idxToDate(idx))
+          return idx === seg.endIdx && hm === '00:00' ? '24:00' : hm
         }
-        // Close the axis at the right edge. A whole day ends at the next
-        // midnight, which reads better as 24:00 than 00:00.
-        const endLabel = this.formatHM(this.idxToDate(seg.endIdx))
-        marks.push({
-          c: seg.cstart + seg.clen,
-          label: endLabel === '00:00' ? '24:00' : endLabel,
-          align: 'end',
-        })
+        const marks = [{ c: vStart, label: labelAt(toIdx(vStart)), align: 'start' }]
+        const first = Math.ceil(toIdx(vStart) / interval) * interval
+        for (let idx = first; idx < toIdx(vEnd); idx += interval) {
+          const c = seg.cstart + (idx - seg.startIdx)
+          if (c - vStart < interval / 4 || vEnd - c < interval / 4) continue
+          marks.push({ c, label: labelAt(idx) })
+        }
+        marks.push({ c: vEnd, label: labelAt(toIdx(vEnd)), align: 'end' })
         return marks
       }
       // Each pass is its own little chart: start time on its left edge, end
@@ -2482,14 +2489,30 @@ export default {
         if (gen === this._forecastGen) this.loading = false
       }
     },
-    // Slides the window by one day per click and reloads. Forward stops
-    // when the window's last day reaches the far edge of the 72h forecast.
-    shiftWindow(delta) {
+    // Calendar-day info for the day `offset` days from today in the display
+    // zone (see the Time zone block up top).
+    dayInfo(offset) {
+      const tz = this.timeZone
+      const now = zoneParts(Date.now(), tz)
+      const startMs = zoneMidnightMs(now.y, now.m, now.d + offset, tz)
+      // Noon is safely inside the day whatever DST does at its edges.
+      const p = zoneParts(startMs + 12 * 3600000, tz)
+      return {
+        date: `${p.y}-${pad2(p.m + 1)}-${pad2(p.d)}`,
+        startMs,
+        weekday: p.wd,
+        display: `${MONTHS[p.m]} ${p.d}`,
+        past: offset < 0,
+      }
+    },
+    // Moves the window to the given day offset (clamped to the 30-day
+    // history / 72h forecast range) and reloads.
+    setWindowOffset(offset) {
       const next = Math.min(
         MAX_FORWARD_OFFSET,
-        Math.max(-MAX_BACK_DAYS, this.windowOffsetDays + delta),
+        Math.max(-MAX_BACK_DAYS, Number(offset)),
       )
-      if (next === this.windowOffsetDays) return
+      if (!Number.isFinite(next) || next === this.windowOffsetDays) return
       this.windowOffsetDays = next
       this.zoomRange = null
       if (this.selectedSatelliteId && this.selectedGroundStationId) {
@@ -3234,51 +3257,43 @@ export default {
   position: relative;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .window-nav {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
   padding-bottom: 10px;
   margin-bottom: 12px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.25);
 }
-.window-nav-center {
+.window-nav-right {
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
 }
-.window-nav-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 26px;
-  min-width: 26px;
-  padding: 0 6px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font-size: 11px;
+.quick-days {
+  height: 36px;
 }
-.window-nav-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
+.day-select {
+  max-width: 220px;
+  flex: none;
 }
-.window-nav-today {
+.day-kind {
+  font-size: 10px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  opacity: 0.6;
+  margin-left: 12px;
 }
-.window-nav-date {
-  min-width: 130px;
-  text-align: center;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  opacity: 0.8;
+.day-kind.today {
+  opacity: 1;
+  color: #4fc3f7;
+}
+.day-kind.forecast {
+  opacity: 0.85;
 }
 /* Vertical divider between passes on the compressed x axis */
 .no-passes-note {
