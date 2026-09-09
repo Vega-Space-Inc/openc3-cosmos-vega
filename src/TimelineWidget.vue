@@ -465,9 +465,9 @@
                 </g>
               </svg>
             </div>
-            <!-- One outlined box per pass, carrying its own lane divider
-                 lines, so each pass reads as a chart of its own with clear
-                 space between neighbours. -->
+            <!-- One outlined cell per (pass, band), laid out to match the
+                 lane rows exactly, so the chart reads as a grid with the
+                 same clear gap between rows as between passes. -->
             <div
               v-for="seg in segments"
               :key="'box-' + seg.cstart"
@@ -479,8 +479,8 @@
             >
               <div
                 v-for="band in visibleBandList"
-                :key="'box-lane-' + band"
-                class="pass-lane-line"
+                :key="'cell-' + band"
+                class="pass-cell"
                 :class="{ expanded: expandedBand === band }"
               />
             </div>
@@ -571,7 +571,7 @@
               v-for="mark in axisMarks"
               :key="'mark-' + (mark.align || 'c') + mark.c"
               class="hour-mark"
-              :class="'align-' + (mark.align || 'center')"
+              :class="['align-' + (mark.align || 'center'), { 'pass-mark': mark.sub }]"
               :style="{ left: cToPct(mark.c) + '%' }"
             >
               <div v-if="mark.label">{{ mark.label }}</div>
@@ -621,7 +621,10 @@ const MAX_BACK_DAYS = 30
 // zoom (passGapUnits converts it), so each pass reads as its own block. A
 // satellite that is always visible (GEO) yields a single day-long pass and
 // keeps normal clock ticks.
-const PASS_GAP_PX = 14
+const PASS_GAP_PX = 8
+// Vertical gap between band rows - the same size as the gap between
+// passes, so the chart reads as a grid of (pass x band) cells.
+const LANE_GAP_PX = 8
 // Context minutes on each side of a pass. Zero: slices (unlike the old
 // lines) don't need to rise from a baseline, and any padding is dead space
 // inside the box.
@@ -1274,12 +1277,22 @@ export default {
         return marks
       }
       // Each pass is its own little chart: start time on its left edge, end
-      // time on its right, pass number centred beneath.
-      return segs.flatMap((s) => [
-        { c: s.cstart, label: s.startLabel, align: 'start' },
-        { c: s.cstart + s.clen, label: s.endLabel, align: 'end' },
-        { c: s.cstart + s.clen / 2, sub: `Pass ${s.index}`, align: 'center' },
-      ])
+      // time on its right, pass number centred beneath. A box too narrow
+      // for two times keeps only its start time.
+      const pxPerUnit =
+        (this.laneWidthPx || 1200) / Math.max(1, this.viewEnd - this.viewStart)
+      return segs.flatMap((s) => {
+        const marks = [{ c: s.cstart, label: s.startLabel, align: 'start' }]
+        if (s.clen * pxPerUnit >= 72) {
+          marks.push({ c: s.cstart + s.clen, label: s.endLabel, align: 'end' })
+        }
+        marks.push({
+          c: s.cstart + s.clen / 2,
+          sub: `Pass ${s.index}`,
+          align: 'center',
+        })
+        return marks
+      })
     },
     // Each lane is scaled to ITS OWN band's peak, not a shared maximum -
     // severity is relative to the band (5 interferers on VHF can matter more
@@ -3022,8 +3035,12 @@ export default {
   justify-content: flex-start;
   padding-right: 6px;
   padding-bottom: 3px;
+  margin-bottom: 8px; /* LANE_GAP_PX - keeps labels level with the rows */
   cursor: pointer;
   transition: height 0.15s ease;
+}
+.lane-label:last-child {
+  margin-bottom: 0;
 }
 .lane-label .lane-name {
   opacity: 0.75;
@@ -3060,33 +3077,37 @@ export default {
 .lane-plot {
   position: relative;
   height: 46px;
+  margin-bottom: 8px; /* LANE_GAP_PX */
   transition: height 0.15s ease;
 }
-/* Per-pass outline + lane dividers (the lanes themselves draw no lines, so
-   nothing crosses the gaps between passes) */
+.lane-plot:last-child {
+  margin-bottom: 0;
+}
+/* Grid cells: one outlined box per (pass, band), stacked to mirror the lane
+   rows exactly (same heights, same row gap). The lanes draw no lines of
+   their own, so nothing crosses the gaps. */
 .pass-box {
   position: absolute;
   top: 0;
   bottom: 0;
-  box-sizing: border-box;
-  border: 1px solid rgba(128, 128, 128, 0.3);
-  border-radius: 3px;
   pointer-events: none;
   display: flex;
   flex-direction: column;
 }
-.pass-lane-line {
+.pass-cell {
   height: 46px;
   flex: none;
   box-sizing: border-box;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+  margin-bottom: 8px; /* LANE_GAP_PX */
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 3px;
   transition: height 0.15s ease;
 }
-.pass-lane-line.expanded {
+.pass-cell.expanded {
   height: 220px;
 }
-.pass-lane-line:last-child {
-  border-bottom: none;
+.pass-cell:last-child {
+  margin-bottom: 0;
 }
 .lane-plot.expanded {
   height: 220px;
@@ -3121,7 +3142,6 @@ export default {
   height: 32px;
 }
 .pass-label {
-  margin-top: 2px;
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -3271,6 +3291,9 @@ export default {
 }
 .hour-mark.align-start {
   transform: none;
+}
+.hour-mark.pass-mark {
+  top: 15px;
 }
 .hour-mark.align-end {
   transform: translateX(-100%);
