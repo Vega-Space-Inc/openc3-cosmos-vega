@@ -418,7 +418,7 @@
                 hovered: hoverBand === band,
               }"
               @mouseenter="hoverBand = band"
-              @click="onLaneClick(band)"
+              @click="onCellClick(band)"
             >
               <div v-if="expandedBand === band" class="lane-title">
                 {{ band }} · ASI Risk
@@ -1847,6 +1847,34 @@ export default {
         return
       }
       this.expandedBand = this.expandedBand === band ? null : band
+    },
+    // A plain click (not the tail of a drag-zoom) on a cell opens it: zoom
+    // to that pass and expand that band's row. Clicking the open cell again
+    // closes it (zoom out, collapse). A click outside any pass (in a gap)
+    // falls back to the row toggle.
+    onCellClick(band) {
+      if (this._wasDrag) {
+        this._wasDrag = false
+        return
+      }
+      const slot = this.hoverSlot
+      if (!slot) {
+        this.expandedBand = this.expandedBand === band ? null : band
+        return
+      }
+      const seg = slot.seg
+      const range = [seg.cstart, seg.cstart + seg.clen]
+      const sameZoom =
+        this.zoomRange &&
+        this.zoomRange[0] === range[0] &&
+        this.zoomRange[1] === range[1]
+      if (sameZoom && this.expandedBand === band) {
+        this.zoomRange = null
+        this.expandedBand = null
+      } else {
+        this.zoomRange = range
+        this.expandedBand = band
+      }
     },
     // --- Satellite telemetry overlay (COSMOS streaming) ---
     async loadTlmTargets() {
