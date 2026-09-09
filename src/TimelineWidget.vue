@@ -294,63 +294,25 @@
         </div>
       </div>
 
-      <!-- Toolbar, centred over the chart: previous/next-day arrows, the
-           window's date, then Today / Reset zoom when relevant. -->
-      <div class="legend-key">
-        <button
-          v-if="tlmItem"
-          type="button"
-          class="legend-chip"
-          :class="{ inactive: !telemetryVisible }"
-          @click="telemetryVisible = !telemetryVisible"
-        >
-          <svg class="chip-swatch" width="22" height="10" viewBox="0 0 22 10">
-            <line
-              x1="1"
-              y1="5"
-              x2="21"
-              y2="5"
-              :stroke="TLM_COLOR"
-              stroke-width="2"
-            />
-          </svg>
-          {{ tlmTarget }} {{ tlmItem }}
-        </button>
-        <button
-          v-if="zoomRange"
-          type="button"
-          class="reset-zoom-btn"
-          @click="resetZoom"
-        >
-          Reset zoom ({{ zoomSpanLabel }})
-        </button>
-        <div class="window-nav">
-          <v-tooltip location="top" text="Previous day">
-            <template #activator="{ props }">
-              <button
-                type="button"
-                class="window-nav-btn"
-                :disabled="loading || windowOffsetDays <= -MAX_BACK_DAYS"
-                v-bind="props"
-                @click="shiftWindow(-1)"
-              >
-                <v-icon size="18">mdi-chevron-left</v-icon>
-              </button>
-            </template>
-          </v-tooltip>
-          <v-tooltip location="top" text="Next day">
-            <template #activator="{ props }">
-              <button
-                type="button"
-                class="window-nav-btn"
-                :disabled="loading || windowOffsetDays >= MAX_FORWARD_OFFSET"
-                v-bind="props"
-                @click="shiftWindow(1)"
-              >
-                <v-icon size="18">mdi-chevron-right</v-icon>
-              </button>
-            </template>
-          </v-tooltip>
+      <!-- Toolbar spanning the chart's width: previous-day arrow at the
+           chart's left edge, next-day at its right, the window's date
+           centred between them (with Today / Reset zoom / the telemetry
+           overlay toggle beside it when relevant). -->
+      <div class="window-nav">
+        <v-tooltip location="top" text="Previous day">
+          <template #activator="{ props }">
+            <button
+              type="button"
+              class="window-nav-btn"
+              :disabled="loading || windowOffsetDays <= -MAX_BACK_DAYS"
+              v-bind="props"
+              @click="shiftWindow(-1)"
+            >
+              <v-icon size="18">mdi-chevron-left</v-icon>
+            </button>
+          </template>
+        </v-tooltip>
+        <div class="window-nav-center">
           <span class="window-nav-date">
             <template v-if="days.length === 1">
               {{ days[0].weekday }} {{ days[0].display }}
@@ -368,7 +330,47 @@
           >
             Today
           </button>
+          <button
+            v-if="zoomRange"
+            type="button"
+            class="reset-zoom-btn"
+            @click="resetZoom"
+          >
+            Reset zoom ({{ zoomSpanLabel }})
+          </button>
+          <button
+            v-if="tlmItem"
+            type="button"
+            class="legend-chip"
+            :class="{ inactive: !telemetryVisible }"
+            @click="telemetryVisible = !telemetryVisible"
+          >
+            <svg class="chip-swatch" width="22" height="10" viewBox="0 0 22 10">
+              <line
+                x1="1"
+                y1="5"
+                x2="21"
+                y2="5"
+                :stroke="TLM_COLOR"
+                stroke-width="2"
+              />
+            </svg>
+            {{ tlmTarget }} {{ tlmItem }}
+          </button>
         </div>
+        <v-tooltip location="top" text="Next day">
+          <template #activator="{ props }">
+            <button
+              type="button"
+              class="window-nav-btn"
+              :disabled="loading || windowOffsetDays >= MAX_FORWARD_OFFSET"
+              v-bind="props"
+              @click="shiftWindow(1)"
+            >
+              <v-icon size="18">mdi-chevron-right</v-icon>
+            </button>
+          </template>
+        </v-tooltip>
       </div>
 
       <!-- Per-band lanes: operators care whether THEIR band is clear, not
@@ -379,7 +381,6 @@
            numberless; clicking one expands it with that band's tick values. -->
       <div v-if="days.length && bands.length" class="lanes-wrap">
         <div class="lanes-body" @mouseleave="hoverBand = null">
-          <div class="lanes-ytitle"><span>ASI Risk</span></div>
           <div class="lanes-labels">
             <div
               v-for="band in visibleBandList"
@@ -2904,22 +2905,6 @@ export default {
 .lanes-body {
   display: flex;
 }
-.lanes-ytitle {
-  width: 20px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.lanes-ytitle span {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.6;
-  white-space: nowrap;
-}
 .lanes-labels {
   width: 64px;
   flex: none;
@@ -3010,7 +2995,7 @@ export default {
   height: 34px;
 }
 .x-axis-spacer {
-  width: 84px; /* .lanes-ytitle + .lanes-labels */
+  width: 64px; /* .lanes-labels */
   flex: none;
 }
 .x-axis-row .x-axis {
@@ -3022,7 +3007,18 @@ export default {
 .window-nav {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  /* Indented past the lane labels so the arrows sit on the chart's own
+     edges and the date centres over the plot */
+  margin-left: 64px;
+  margin-bottom: 6px;
+}
+.window-nav-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 .window-nav-btn {
   display: flex;
