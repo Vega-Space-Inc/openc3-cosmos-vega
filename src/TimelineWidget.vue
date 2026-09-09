@@ -685,6 +685,16 @@ const SLICE_FILL = 0.7
 // slots of 2, 3, ... minutes (worst minute wins) so the slices stay visible.
 const MIN_SLOT_PX = 4
 
+// Header options for every cmd() this widget sends. The js-common axios
+// layer pops a global "Network error" toast for any failed API call and
+// prints the request body in it - which for our commands includes the
+// user's API key. Listing the statuses here tells it to skip the toast and
+// just reject, so the widget reports failures in its own words (and
+// retries the transient ones) with the key never on screen.
+const CMD_OPTS = {
+  headers: { 'Ignore-Errors': '400 401 403 404 408 422 500 502 503 504' },
+}
+
 // CVT poll cadence while waiting for a command's HTTP response to land, and
 // how long "check again" waits for APPROVED_ORGS to refresh before it
 // classifies whatever is there.
@@ -1563,7 +1573,12 @@ export default {
         const before = await this.readPackets(INTEGRATION_SPEC)
         const okStamp = stampOf(before.APPROVED_ORGS)
         const errStamp = stampOf(before[ERROR_PACKET])
-        await this.api.cmd('VEGA', 'GET_APPROVED_ORGS', this.authOverride())
+        await this.api.cmd(
+          'VEGA',
+          'GET_APPROVED_ORGS',
+          this.authOverride(),
+          CMD_OPTS,
+        )
         const deadline = Date.now() + INTEGRATION_CHECK_TIMEOUT_MS
         while (Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
@@ -2526,7 +2541,12 @@ export default {
       })
       const stamp = stampOf(before[packet])
       const errStamp = stampOf(before[ERROR_PACKET])
-      await this.api.cmd('VEGA', command, { ...this.authOverride(), ...params })
+      await this.api.cmd(
+        'VEGA',
+        command,
+        { ...this.authOverride(), ...params },
+        CMD_OPTS,
+      )
       const pollSpec = {
         [packet]: ['RECEIVED_TIMESECONDS', 'HTTP_STATUS', ...echo],
         [ERROR_PACKET]: ERROR_ITEMS,
