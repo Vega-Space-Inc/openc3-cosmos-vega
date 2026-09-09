@@ -401,6 +401,14 @@
             @mousemove="onPlotHover"
             @mouseleave="onPlotLeave"
           >
+            <!-- Hovered cell's backdrop. An earlier sibling of the lanes so it
+                 paints beneath the bars; the matching cell's border is lit
+                 via .pass-cell.active. -->
+            <div
+              v-if="hoverCell"
+              class="cell-highlight"
+              :style="hoverCell.style"
+            />
             <div
               v-for="band in visibleBandList"
               :key="'lane-' + band"
@@ -481,7 +489,13 @@
                 v-for="band in visibleBandList"
                 :key="'cell-' + band"
                 class="pass-cell"
-                :class="{ expanded: expandedBand === band }"
+                :class="{
+                  expanded: expandedBand === band,
+                  active:
+                    hoverCell &&
+                    hoverCell.band === band &&
+                    hoverCell.cstart === seg.cstart,
+                }"
               />
             </div>
             <div
@@ -1387,6 +1401,33 @@ export default {
       const stop = Math.min(seg.endIdx, start + slot)
       const c0 = seg.cstart + (start - seg.startIdx)
       return { seg, start, stop, cx: c0 + (stop - start) / 2 }
+    },
+    // The hovered grid cell (pass x band): which one, and where its backdrop
+    // goes. Row geometry mirrors the lane stack (46px rows, 220px expanded,
+    // LANE_GAP_PX between).
+    hoverCell() {
+      const slot = this.hoverSlot
+      const band = this.hoverBand
+      if (!slot || !band || !this.visibleBands[band]) return null
+      let top = 0
+      for (const b of this.visibleBandList) {
+        const h = this.expandedBand === b ? 220 : 46
+        if (b === band) {
+          const span = this.viewEnd - this.viewStart
+          return {
+            band,
+            cstart: slot.seg.cstart,
+            style: {
+              left: `${this.cToPct(slot.seg.cstart)}%`,
+              width: `${(slot.seg.clen / span) * 100}%`,
+              top: `${top}px`,
+              height: `${h}px`,
+            },
+          }
+        }
+        top += h + LANE_GAP_PX
+      }
+      return null
     },
     // The hovered slice per band, ready to redraw on top of the dimmed lane.
     hoverSlices() {
@@ -3105,6 +3146,16 @@ export default {
 }
 .pass-cell.expanded {
   height: 220px;
+}
+.pass-cell.active {
+  border-color: rgba(255, 255, 255, 0.75);
+}
+.cell-highlight {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
 }
 .pass-cell:last-child {
   margin-bottom: 0;
