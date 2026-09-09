@@ -1240,7 +1240,9 @@ export default {
           offset: o,
           kind,
           disabled,
-          kindLabel: disabled ? 'no forecast yet' : kind,
+          // Only 'today' and the horizon get a tag; past/forecast is
+          // obvious from the position relative to today.
+          kindLabel: disabled ? 'no forecast yet' : kind === 'today' ? 'today' : '',
         })
       }
       return rows
