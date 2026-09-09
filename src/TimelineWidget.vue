@@ -134,7 +134,6 @@
 
     <template v-else>
       <div class="controls-col">
-        <span class="select-label">SELECT FORECAST</span>
         <div class="controls-row">
           <v-select
             v-if="organizations.length > 1"
@@ -2943,7 +2942,7 @@ export default {
 .timeline-widget {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
   padding: 8px;
   min-width: 700px;
   color: var(--v-theme-on-surface, inherit);
@@ -2952,13 +2951,12 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 6px;
 }
 .controls-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 .select-label {
   font-size: 11px;
@@ -3414,10 +3412,8 @@ export default {
 .window-nav {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-bottom: 10px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+  gap: 8px;
+  margin-bottom: 4px;
 }
 .window-nav-right {
   margin-left: auto;
