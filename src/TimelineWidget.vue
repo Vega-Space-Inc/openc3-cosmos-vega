@@ -2819,6 +2819,9 @@ export default {
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
+  padding-bottom: 12px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
 }
 .controls-row {
   display: flex;
@@ -3238,7 +3241,9 @@ export default {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 6px;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
 }
 .window-nav-center {
   display: flex;
