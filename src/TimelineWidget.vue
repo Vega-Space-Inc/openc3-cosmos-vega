@@ -4,11 +4,14 @@
 # User picks a satellite AND a ground station. One chart, continuous x axis
 # (72 hours by default, click-drag to zoom into a narrower window),
 # quantitative y axis ("Interference" = per-minute interferer count). Each
-# frequency band is an overlaid line with its own fixed color + dash pattern,
-# toggled on/off via the chip row below the chart, which doubles as a legend
-# (each chip previews that band's exact line style). A minute where the
-# satellite isn't covered/visible from the ground station is plotted as zero
-# interactions (not a gap), so every line is continuous. If the target has no
+# frequency band gets its own lane of bottom-aligned per-minute bars: bar
+# height is the count (scaled to that band's own peak) and bar colour is the
+# severity tone Vega itself assigns to the minute (normal / warning / high,
+# from the tone_thresholds the API returns with each day), so the chart reads
+# like the Vega app's own timeline. Bands are toggled on/off via the chip row,
+# and the severity key beside it shows the thresholds in force. A minute
+# where the satellite isn't covered/visible from the ground station is
+# plotted as zero interactions (not a gap). If the target has no
 # working Vega connection yet (the VEGA_API_KEY COSMOS secret is missing or
 # invalid), a read-only onboarding state explains what the COSMOS admin has
 # to set up instead.
@@ -259,18 +262,24 @@
           :class="{ inactive: !visibleBands[band] }"
           @click="toggleBand(band)"
         >
-          <svg class="chip-swatch" width="22" height="10" viewBox="0 0 22 10">
-            <line
-              x1="1"
-              y1="5"
-              x2="21"
-              y2="5"
-              :stroke="bandColor(band)"
-              stroke-width="2"
-            />
-          </svg>
           {{ band }}
         </button>
+        <!-- Severity key: the bar colours, with the thresholds actually in
+             force for the loaded days (they come from the API per day). -->
+        <div
+          v-if="severityKey"
+          class="severity-key"
+          title="Bar colour = severity tone Vega assigns to each minute, from its per-band interference count"
+        >
+          <span
+            v-for="tone in severityKey"
+            :key="tone.tone"
+            class="severity-key-item"
+          >
+            <span class="tone-swatch" :style="{ background: tone.color }" />
+            {{ tone.label }}
+          </span>
+        </div>
         <button
           v-if="tlmItem"
           type="button"
@@ -346,11 +355,12 @@
       </div>
 
       <!-- Per-band lanes: operators care whether THEIR band is clear, not
-           how bands compare, so each band gets its own row instead of an
-           overlaid line chart. Collapsed lanes are numberless sparklines,
-           each scaled to its own band's peak (ASI Risk = per-minute
-           interferer count; severity is relative to the band);
-           clicking a lane expands it with that band's tick values. -->
+           how bands compare, so each band gets its own row. Each lane is a
+           run of bottom-aligned per-minute bars: height is the interferer
+           count scaled to that band's own peak (so a quiet band still shows
+           its shape), colour is the severity tone Vega assigns to that minute
+           (absolute, from the API's tone thresholds). Collapsed lanes are
+           numberless; clicking one expands it with that band's tick values. -->
       <div v-if="days.length && bands.length" class="lanes-wrap">
         <div class="lanes-body" @mouseleave="hoverBand = null">
           <div class="lanes-labels">
@@ -365,9 +375,7 @@
               @mouseenter="hoverBand = band"
               @click="onLaneClick(band)"
             >
-              <span class="lane-name" :style="{ color: bandColor(band) }">{{
-                band
-              }}</span>
+              <span class="lane-name">{{ band }}</span>
               <template v-if="expandedBand === band">
                 <div
                   v-for="tick in expandedYTicks"
@@ -406,14 +414,20 @@
                 :viewBox="`${viewStart} 0 ${viewEnd - viewStart} ${CHART_H}`"
                 preserveAspectRatio="none"
               >
-                <path
-                  :d="bandPaths[band]"
-                  fill="none"
-                  :stroke="bandColor(band)"
-                  :stroke-width="hoverBand === band ? 2.5 : 1.5"
-                  :opacity="hoverBand && hoverBand !== band ? 0.3 : 1"
-                  vector-effect="non-scaling-stroke"
-                />
+                <!-- One path per severity tone, each a run of 1-minute-wide
+                     rects rising from the baseline. The viewBox does the
+                     horizontal scaling on zoom; crispEdges stops hairline
+                     seams between adjacent bars. -->
+                <g :opacity="hoverBand && hoverBand !== band ? 0.3 : 1">
+                  <path
+                    v-for="tone in TONES"
+                    :key="tone"
+                    :d="bandBars[band][tone]"
+                    :fill="TONE_COLORS[tone]"
+                    stroke="none"
+                    shape-rendering="crispEdges"
+                  />
+                </g>
               </svg>
             </div>
             <div
@@ -465,23 +479,10 @@
                 class="hover-tooltip-row"
                 :class="{ 'hover-tooltip-row-active': row.band === hoverBand }"
               >
-                <svg
-                  class="chip-swatch"
-                  width="14"
-                  height="8"
-                  viewBox="0 0 14 8"
-                >
-                  <line
-                    x1="0"
-                    y1="4"
-                    x2="14"
-                    y2="4"
-                    :stroke="row.color"
-                    stroke-width="2"
-                  />
-                </svg>
+                <span class="tone-swatch" :style="{ background: row.color }" />
                 <span class="hover-tooltip-band">{{ row.band }}</span>
                 <span class="hover-tooltip-count">{{ row.count }}</span>
+                <span class="hover-tooltip-tone">{{ row.toneLabel }}</span>
               </div>
               <div
                 v-if="hoverInfo.rows.length === 0"
@@ -589,28 +590,23 @@ const MONTHS = [
 // viewStart..viewEnd, in minutes - zooming just narrows this window, it
 // never touches the underlying path data.
 const CHART_H = 220
-// Each band gets a color + dash pattern pair, cycling independently (9 x 5 =
-// 45 combos before any true repeat) so overlapping lines stay distinguishable
-// by shape/texture as well as hue - helps with similar colors, colorblind
-// viewers, or a washed-out display.
-const BAND_COLOR_PALETTE = [
-  '#4fc3f7',
-  '#ba68c8',
-  '#ffb74d',
-  '#81c784',
-  '#e57373',
-  '#64b5f6',
-  '#f06292',
-  '#aed581',
-  '#ffd54f',
-]
-const BAND_DASH_PATTERNS = [
-  'none', // solid
-  '7,4', // dashed
-  '1.5,3', // dotted
-  '7,3,1.5,3', // dash-dot
-  '10,3,2,3,2,3', // dash-dot-dot
-]
+// Severity tones. Each per-minute bar is coloured by the tone Vega assigns
+// to that minute for that band, using the tone_thresholds the API returns
+// with every day (warning_min / high_min = per-band count at or above which
+// a minute is 'warning' / 'high'). Same green / amber / red ramp as the Vega
+// app's own timeline, so the two read identically. Severity is also encoded
+// by bar height and spelled out in the tooltip, so hue is never the only cue.
+const TONES = ['normal', 'warning', 'high']
+const TONE_COLORS = {
+  normal: '#43a047',
+  warning: '#ffb300',
+  high: '#e53935',
+}
+const TONE_LABELS = {
+  normal: 'Normal',
+  warning: 'Warning',
+  high: 'High',
+}
 
 // CVT poll cadence while waiting for a command's HTTP response to land, and
 // how long "check again" waits for APPROVED_ORGS to refresh before it
@@ -724,6 +720,8 @@ export default {
   data() {
     return {
       CHART_H,
+      TONES,
+      TONE_COLORS,
       VEGA_API_KEYS_URL,
       VEGA_SIGNUP_URL,
       // true once we've classified the last APPROVED_ORGS response as not a
@@ -1101,15 +1099,45 @@ export default {
       }
       return ticks
     },
-    // One SVG path per band, computed once when the underlying data/selection
-    // changes rather than on every render. Zooming does NOT recompute these -
-    // it only changes the SVG viewBox, so drag-zoom stays cheap/instant.
-    bandPaths() {
+    // One SVG path per band per severity tone, computed once when the
+    // underlying data/selection changes rather than on every render. Zooming
+    // does NOT recompute these - it only changes the SVG viewBox, so drag-zoom
+    // stays cheap/instant.
+    bandBars() {
       const result = {}
       for (const band of this.bands) {
-        result[band] = this.buildBandPath(band)
+        result[band] = this.buildBandBars(band)
       }
       return result
+    },
+    // Legend entries for the bar colours, showing the thresholds actually in
+    // force. Thresholds arrive per day from the API; the first loaded day
+    // that has them is used (they are constant per satellite in practice).
+    severityKey() {
+      const dayData = this.days
+        .map((d) => this.dayDataByDate[d.date])
+        .find((d) => d && Number.isFinite(d.toneWarningMin))
+      if (!dayData) return null
+      const warn = dayData.toneWarningMin
+      const high = dayData.toneHighMin
+      return [
+        {
+          tone: 'normal',
+          color: TONE_COLORS.normal,
+          label:
+            warn > 1 ? `${TONE_LABELS.normal} < ${warn}` : TONE_LABELS.normal,
+        },
+        {
+          tone: 'warning',
+          color: TONE_COLORS.warning,
+          label: `${TONE_LABELS.warning} ≥ ${warn}`,
+        },
+        {
+          tone: 'high',
+          color: TONE_COLORS.high,
+          label: `${TONE_LABELS.high} ≥ ${high}`,
+        },
+      ]
     },
     dragSelectionStyle() {
       if (this.dragStartPx === null) return null
@@ -1146,12 +1174,19 @@ export default {
       const rows = this.bands
         .filter((b) => this.visibleBands[b])
         .filter((b) => !this.hoverBand || b === this.hoverBand)
-        .map((b) => ({
-          band: b,
-          count: entry.covered ? (entry.counts && entry.counts[b]) || 0 : 0,
-          color: this.bandColor(b),
-          dash: this.bandDash(b),
-        }))
+        .map((b) => {
+          const count = entry.covered
+            ? (entry.counts && entry.counts[b]) || 0
+            : 0
+          const tone = this.toneOf(count, dayData)
+          return {
+            band: b,
+            count,
+            tone,
+            color: tone ? TONE_COLORS[tone] : 'transparent',
+            toneLabel: tone ? TONE_LABELS[tone] : entry.covered ? 'Clear' : '',
+          }
+        })
       return {
         label: `${day.weekday} ${day.display} ${this.formatHM(this.idxToDate(this.hoverIdx))}`,
         covered: entry.covered,
@@ -1619,14 +1654,6 @@ export default {
       if (abs >= 10) return v.toFixed(1)
       return Number(v.toPrecision(3)).toString()
     },
-    bandColor(band) {
-      const idx = this.bands.indexOf(band)
-      return BAND_COLOR_PALETTE[idx % BAND_COLOR_PALETTE.length]
-    },
-    bandDash(band) {
-      const idx = this.bands.indexOf(band)
-      return BAND_DASH_PATTERNS[idx % BAND_DASH_PATTERNS.length]
-    },
     dayIdxOf(day) {
       return this.days.findIndex((d) => d.date === day.date)
     },
@@ -1681,34 +1708,44 @@ export default {
       else niceResidual = 10
       return niceResidual * magnitude
     },
-    // Builds one band's SVG path across every loaded day, as ONE continuous
-    // line: a minute where the satellite isn't covered/visible from the
-    // ground station is plotted as zero interactions (not a gap), so the
-    // line is horizontal there rather than missing. The only real breaks
-    // (new M subpath) are for a day that was never loaded/failed - genuinely
-    // unknown data, unlike "covered=false" which is known to be zero.
-    // One subpath per pass, in compressed x coordinates - the removed
-    // between-pass dead time never gets a line drawn across it.
-    buildBandPath(band) {
-      // Scale to this band's own peak - see bandMaxes.
+    // Severity tone for a per-band count, using that day's own thresholds
+    // (warning_min / high_min from the API). null = nothing to draw.
+    toneOf(count, dayData) {
+      if (!(count > 0)) return null
+      const warn = dayData?.toneWarningMin ?? 1
+      const high = dayData?.toneHighMin ?? 10
+      if (count >= high) return 'high'
+      if (count >= warn) return 'warning'
+      return 'normal'
+    },
+    // Builds one band's bars across every loaded day as three SVG paths, one
+    // per severity tone, so a lane is at most three <path> elements no matter
+    // how many minutes it holds. Each bar is a 1-minute-wide rect rising from
+    // the baseline (CHART_H) in compressed x coordinates, drawn only inside
+    // passes - the removed between-pass dead time never gets bars. A minute
+    // that isn't covered, or has zero interference, draws nothing: on the
+    // pass-compressed axis "no bar" already reads as "clean".
+    buildBandBars(band) {
+      // Height scales to this band's own peak - see bandMaxes. Colour does
+      // not: it follows the API's absolute per-band thresholds via toneOf.
       const max = this.bandMaxes[band] || 1
-      const valueY = (count) => CHART_H - Math.min(1, count / max) * CHART_H
       const entries = this.minuteEntries
-      let d = ''
+      const d = { normal: '', warning: '', high: '' }
       for (const seg of this.segments) {
-        let cmd = 'M'
         for (let idx = seg.startIdx; idx < seg.endIdx; idx++) {
           const entry = entries[idx]
-          const count =
-            entry && entry.covered
-              ? (entry.counts && entry.counts[band]) || 0
-              : 0
+          if (!entry || !entry.covered) continue
+          const count = (entry.counts && entry.counts[band]) || 0
+          const day = this.days[Math.floor(idx / 1440)]
+          const tone = this.toneOf(count, day && this.dayDataByDate[day.date])
+          if (!tone) continue
+          const h = Math.min(1, count / max) * CHART_H
           const x = seg.cstart + (idx - seg.startIdx)
-          d += `${cmd}${x},${valueY(count).toFixed(1)} `
-          cmd = 'L'
+          // M x,top  h1  V baseline  h-1  Z : one bar, 1 minute wide
+          d[tone] += `M${x},${(CHART_H - h).toFixed(1)}h1V${CHART_H}h-1Z`
         }
       }
-      return d.trim()
+      return d
     },
     // Click-drag on the chart to zoom into a narrower time window. The
     // underlying path data (in absolute minute coordinates) never changes -
@@ -2037,8 +2074,8 @@ export default {
     // Fetches the whole past region's measured interference in one
     // GET_HISTORY request and converts it into the SAME per-day/per-minute
     // shape GET_DAY_DETAIL produces (covered + per-band counts), so past
-    // days render through the identical band-line pipeline as the forecast:
-    // same colors, dash patterns, legend toggles and tooltip. A 404/timeout
+    // days render through the identical per-band bar pipeline as the forecast:
+    // same severity colours, legend toggles and tooltip. A 404/timeout
     // is non-fatal upstream - the chart just shows forecast only.
     async loadHistory(
       satelliteId,
@@ -2385,8 +2422,8 @@ export default {
   opacity: 0.55;
 }
 
-// Band toggle chips - each one previews that band's exact line style
-// (color + dash pattern) as a mini swatch, doubling as the color/texture key
+// Band toggle chips are plain text now that colour encodes severity rather
+// than band; the severity key next to them explains the bar colours
 .legend-key {
   display: flex;
   flex-wrap: wrap;
@@ -2413,6 +2450,33 @@ export default {
 .chip-swatch {
   display: block;
   overflow: visible;
+}
+.severity-key {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 6px;
+  font-size: 11px;
+  opacity: 0.8;
+}
+.severity-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.tone-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+.hover-tooltip-tone {
+  margin-left: 6px;
+  font-size: 10px;
+  opacity: 0.75;
+  letter-spacing: 0.04em;
 }
 .reset-zoom-btn {
   padding: 3px 10px;
