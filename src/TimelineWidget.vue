@@ -623,14 +623,94 @@
         </div>
         <!-- Ramp legend: slice colour (and height) is the interferer count
              relative to that band's own peak across the loaded days. -->
-        <div
-          class="ramp-legend"
-          title="Slice colour and height = interferer count relative to that band's peak in the loaded window"
-        >
+        <div class="ramp-legend">
           <span>Low ASI Risk</span>
           <span class="ramp-swatch" :style="{ background: rampCss }" />
           <span>High ASI Risk</span>
+          <button
+            type="button"
+            class="asi-info-btn"
+            title="What ASI risk is and how it is calculated"
+            @click="showAsiInfo = true"
+          >
+            <v-icon size="15">mdi-information-outline</v-icon>
+            ASI Risk Overview
+          </button>
         </div>
+
+        <v-dialog v-model="showAsiInfo" max-width="600">
+          <v-card class="asi-info">
+            <v-card-title class="asi-info-title">ASI Risk Overview</v-card-title>
+            <v-card-text class="asi-info-body">
+              <p>
+                <strong>Adjacent satellite interference (ASI)</strong> is
+                the risk that another satellite transmitting in the same
+                frequency band is in your ground station's view at the same
+                time as the satellite you are tracking, so its signal can
+                land in your receiver alongside the one you want.
+              </p>
+              <h4>How Vega calculates it</h4>
+              <ol>
+                <li>
+                  <strong>Visibility.</strong> Vega propagates the orbit of
+                  the selected satellite and works out, minute by minute,
+                  when it is above the horizon from the selected ground
+                  station. Those minutes are the passes you see as boxes;
+                  a satellite that is always in view (GEO) gives one
+                  box for the whole day.
+                </li>
+                <li>
+                  <strong>Candidates.</strong> From the catalog of tracked
+                  satellites it selects the ones whose transmit frequencies
+                  overlap a band the selected satellite uses. Satellites in
+                  other bands are ignored.
+                </li>
+                <li>
+                  <strong>Overlap.</strong> For every covered minute and
+                  every band, it counts how many of those candidates are
+                  simultaneously in view of the station. That count is the
+                  <strong>interferer count</strong> - the number behind each
+                  bar.
+                </li>
+              </ol>
+              <h4>Reading the chart</h4>
+              <ul>
+                <li>
+                  Each bar is one minute (or a few minutes when the view is
+                  too narrow to show them individually - the tooltip then
+                  says which). Its height and colour are that minute's
+                  interferer count relative to the band's busiest minute in
+                  the loaded day, from green (quiet) through amber to red
+                  (the peak). The tooltip gives the actual count.
+                </li>
+                <li>
+                  Vega's own severity scale is absolute: a minute with
+                  1 or more interferers is a <em>warning</em> and 10 or more
+                  is <em>high</em>. The COSMOS limits on the
+                  <code>FORECASTING_SUMMARY</code> packet use that scale.
+                </li>
+                <li>
+                  Today and the next two days come from the latest forecast
+                  run (refreshed several times a day); earlier days are the
+                  measured record for that day. The chart only shows time
+                  when the satellite is in view - gaps between passes are
+                  removed.
+                </li>
+              </ul>
+              <p class="asi-info-note">
+                Counts are geometric and spectral - they say how many
+                same-band satellites share the station's sky, not the
+                received power of each. Treat a high count as a cue to
+                check the pass, not as a measured carrier-to-interference
+                ratio.
+              </p>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="showAsiInfo = false">Close</v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
       </div>
     </template>
   </div>
@@ -924,8 +1004,9 @@ export default {
       RAMP_COLORS,
       // COSMOS 'time_zone' setting - see the Time zone block up top.
       timeZone: 'local',
-      // Wall clock, ticked every 30s so the "now" line and its label move.
+      // Wall clock, ticked every 30s so the "now" line moves.
       nowMs: Date.now(),
+      showAsiInfo: false,
       // CSS px width of the lanes area, kept current by a ResizeObserver;
       // drives how many minutes each slice covers (see slotMinutes).
       laneWidthPx: 0,
@@ -2999,7 +3080,7 @@ export default {
 .ramp-legend {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 10px;
   margin-top: 14px;
   padding-top: 12px;
@@ -3021,6 +3102,53 @@ export default {
   height: 8px;
   border-radius: 2px;
   flex: none;
+}
+.asi-info-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 14px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #4fc3f7;
+  font-size: 11px;
+  cursor: pointer;
+}
+.asi-info-btn:hover {
+  text-decoration: underline;
+}
+.asi-info-title {
+  font-size: 18px;
+}
+.asi-info-body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.asi-info-body h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+.asi-info-body p,
+.asi-info-body li {
+  margin-bottom: 8px;
+}
+.asi-info-body ol,
+.asi-info-body ul {
+  padding-left: 22px;
+}
+.asi-info-body code {
+  font-size: 12px;
+}
+.asi-info-note {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(128, 128, 128, 0.3);
+  opacity: 0.8;
 }
 .hover-tooltip-tone {
   margin-left: 6px;
