@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Dev loop: build the plugin and load it into the local COSMOS compose stack.
+# Loads through the cmd-tlm-api container as the owner of /gems: the operator
+# mounts /gems read-only, and a plain `docker exec` runs as a user that does
+# not own /gems/cosmoscache (EACCES). This is what Admin > Plugins does.
 #
 #   bin/dev-install.sh            # version 0.47.0.<timestamp>, upgrades in place
 #   bin/dev-install.sh 0.48.0     # explicit version (use for a real release)
@@ -12,12 +15,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION="${1:-0.47.0.$(date +%Y%m%d%H%M)}"
-OP="${OPENC3_OPERATOR:-cosmos-openc3-operator-1}"
+API="${OPENC3_API_CONTAINER:-cosmos-openc3-cosmos-cmd-tlm-api-1}"
+OWNER="$(docker exec "$API" stat -c %u:%g /gems/cosmoscache)"
 GEM="openc3-cosmos-vega-$VERSION.gem"
 
 rake build VERSION="$VERSION"
-docker cp "$GEM" "$OP:/tmp/$GEM"
-docker cp vars.json "$OP:/tmp/vega-vars.json"
-docker exec "$OP" openc3cli load "/tmp/$GEM" --variables /tmp/vega-vars.json
+docker cp "$GEM" "$API:/tmp/$GEM"
+docker cp vars.json "$API:/tmp/vega-vars.json"
+docker exec -u "$OWNER" "$API" openc3cli load "/tmp/$GEM" --variables /tmp/vega-vars.json
 echo
 echo "Loaded $GEM. Hard-refresh the browser (Cmd+Shift+R) to pick up the new widget."
