@@ -7,26 +7,51 @@ VARIABLE vega_port 443
   VARIABLE_DESCRIPTION "Port for the Vega API"
 VARIABLE vega_protocol https
   VARIABLE_DESCRIPTION "Protocol for the Vega API (http or https)"
-VARIABLE vega_api_token CHANGE_ME
-  VARIABLE_DESCRIPTION "Vega frontend API key (vgk_... prefix). Create one in the Vega app under your account's API Keys page - NOTE: this is stored as plain plugin config, visible to any COSMOS admin. Rotate/revoke it there if this COSMOS instance is ever decommissioned."
 VARIABLE vega_org_id 0
   VARIABLE_DESCRIPTION "Organization ID to poll workspace/forecasting data for. Find this by polling VEGA GET_APPROVED_ORGS first (or GET /api/v1/frontend/organization_requests/approved_organizations) and picking an org id your key has approved access to. 0 disables the org-scoped polls."
-VARIABLE vega_poll_period 30
-  VARIABLE_DESCRIPTION "Seconds between polls of each Vega endpoint"
+VARIABLE vega_poll_period 120
+  VARIABLE_DESCRIPTION "Seconds between polls of GET_HEALTH and GET_FORECASTING_SUMMARY (0 disables periodic polling; a poll still runs at connect)"
+VARIABLE vega_slow_poll_period 3600
+  VARIABLE_DESCRIPTION "Seconds between polls of GET_APPROVED_ORGS and GET_WORKSPACE, which change on the order of days (0 disables periodic polling; a poll still runs at connect)"
+VARIABLE vega_read_timeout 30.0
+  VARIABLE_DESCRIPTION "Seconds to wait for an API response"
+VARIABLE vega_connect_timeout 10.0
+  VARIABLE_DESCRIPTION "Seconds to wait for the connection to be established"
 
 TARGET VEGA VEGA
-  # Decom tlm and cmd data in the time-series database is kept forever by default.
-  # Uncomment to enforce a 30 day retention time. See https://docs.openc3.com/docs/configuration/plugins
-  # CMD_DECOM_RETAIN_TIME 30d
-  # TLM_DECOM_RETAIN_TIME 30d
+  # WORKSPACE and FORECASTING_SUMMARY carry whole JSON arrays (every satellite and
+  # ground station) on every poll, so unbounded decom retention grows fast.
+  CMD_DECOM_RETAIN_TIME 30d
+  TLM_DECOM_RETAIN_TIME 30d
 
-INTERFACE VEGA_INT http_client_interface.rb <%= vega_hostname %> <%= vega_port %> <%= vega_protocol %> 20.0 20.0
+# HttpClientInterface args: hostname port protocol write_timeout read_timeout connect_timeout
+INTERFACE VEGA_INT http_client_interface.rb <%= vega_hostname %> <%= vega_port %> <%= vega_protocol %> 5.0 <%= vega_read_timeout %> <%= vega_connect_timeout %>
   MAP_TARGET VEGA
+  # The API key never appears in plugin config or the command log: SECRET mounts
+  # the Admin / Secrets entry named VEGA_API_KEY as an environment variable in the
+  # interface container, and the WRITE protocol adds it to the Authorization
+  # header after the command has been logged. See targets/VEGA/lib/api_key_protocol.rb.
+  PROTOCOL WRITE api_key_protocol.rb Authorization VEGA_API_KEY "Bearer "
+  SECRET ENV VEGA_API_KEY VEGA_API_KEY
+  # CONNECT_CMD populates the CVT as soon as the interface connects;
+  # PERIODIC_CMD only fires for the first time one full period later.
+  OPTION CONNECT_CMD DONT_LOG "VEGA GET_HEALTH"
+  OPTION CONNECT_CMD DONT_LOG "VEGA GET_APPROVED_ORGS"
+  <% if vega_poll_period.to_f > 0.0 %>
   OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "VEGA GET_HEALTH"
-  OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "VEGA GET_APPROVED_ORGS"
-<% if vega_org_id.to_i > 0 %>
-  OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "VEGA GET_WORKSPACE"
+  <% end %>
+  <% if vega_slow_poll_period.to_f > 0.0 %>
+  OPTION PERIODIC_CMD DONT_LOG <%= vega_slow_poll_period %> "VEGA GET_APPROVED_ORGS"
+  <% end %>
+  <% if vega_org_id.to_i > 0 %>
+  OPTION CONNECT_CMD DONT_LOG "VEGA GET_WORKSPACE"
+  OPTION CONNECT_CMD DONT_LOG "VEGA GET_FORECASTING_SUMMARY"
+  <% if vega_poll_period.to_f > 0.0 %>
   OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "VEGA GET_FORECASTING_SUMMARY"
-<% end %>
+  <% end %>
+  <% if vega_slow_poll_period.to_f > 0.0 %>
+  OPTION PERIODIC_CMD DONT_LOG <%= vega_slow_poll_period %> "VEGA GET_WORKSPACE"
+  <% end %>
+  <% end %>
 
 WIDGET Timeline

@@ -1,51 +1,57 @@
 # Commands for the VEGA target are HTTP GET requests against the Elara-AI /
 # Vega Space REST API (https://admin.vega.space/api/v1). Each command has no
 # body - it just tells HttpClientInterface which path/method to hit and which
-# TELEMETRY packet the JSON response should be decoded into.
+# TELEMETRY packet the JSON response should be decoded into (HTTP_PACKET), and
+# which packet a non-2xx response lands in (HTTP_ERROR_PACKET -> ERROR_RESPONSE).
 #
-# These are triggered automatically on an interval via the OPTION PERIODIC_CMD
-# lines in plugin.txt, so you normally never send them manually. You can also
-# send them by hand from Command Sender to force an immediate refresh.
+# The polled commands are sent automatically: once at connect (OPTION
+# CONNECT_CMD) and then on an interval (OPTION PERIODIC_CMD) - see plugin.txt.
+# You can also send them by hand from Command Sender to force a refresh.
 #
-# Auth uses a frontend API key (vgk_... prefix, plugin variable vega_api_token),
-# which is scoped to ONE Vega user - not an org - so every one of these
+# AUTH: the Vega frontend API key (vgk_... prefix) is NOT a command parameter
+# and does not appear anywhere in this file, in plugin.txt, or in the command
+# log. It is stored as the COSMOS secret VEGA_API_KEY (Admin / Secrets), mounted
+# into the interface container by `SECRET ENV VEGA_API_KEY VEGA_API_KEY`, and
+# added to the Authorization header by the WRITE protocol
+# targets/VEGA/lib/api_key_protocol.rb after each command has been logged.
+# A missing/invalid key shows up as HTTP 401 in ERROR_RESPONSE.
+#
+# The key is scoped to ONE Vega user - not an org - so every one of these
 # endpoints lives under /api/v1/frontend/* and is gated by that user's
 # individually-approved organization access (FrontendOrganizationRequest).
 # GET_WORKSPACE / GET_FORECASTING_SUMMARY are scoped to a single org, chosen
 # via the vega_org_id plugin variable - see GET_APPROVED_ORGS to find valid ids.
+#
+# HTTP_PATH / HTTP_METHOD / HTTP_PACKET / HTTP_ERROR_PACKET are hidden from
+# Command Sender by IGNORE_PARAMETER in target.txt.
 
 COMMAND VEGA GET_HEALTH BIG_ENDIAN "Poll the Vega API health check endpoint (unauthenticated)"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/health_check"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "HEALTH"
+  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
 
 COMMAND VEGA GET_APPROVED_ORGS BIG_ENDIAN "Poll the list of organizations this API key's user has approved access to"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/organization_requests/approved_organizations"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "APPROVED_ORGS"
-  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "AUTH_ERROR"
-  PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "Bearer <%= vega_api_token %>"
-  PARAMETER HTTP_HEADER_CONNECTION 0 0 DERIVED nil nil "close"
+  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
 
 COMMAND VEGA GET_WORKSPACE BIG_ENDIAN "Poll org workspace: satellites and ground stations for vega_org_id"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/organizations/<%= vega_org_id %>/workspace"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "WORKSPACE"
-  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "AUTH_ERROR"
-  PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "Bearer <%= vega_api_token %>"
-  PARAMETER HTTP_HEADER_CONNECTION 0 0 DERIVED nil nil "close"
+  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
 
 COMMAND VEGA GET_FORECASTING_SUMMARY BIG_ENDIAN "Poll interference/coverage forecast summary for vega_org_id"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/organizations/<%= vega_org_id %>/forecasting/summary"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "FORECASTING_SUMMARY"
-  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "AUTH_ERROR"
-  PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "Bearer <%= vega_api_token %>"
-  PARAMETER HTTP_HEADER_CONNECTION 0 0 DERIVED nil nil "close"
+  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
 
 # On-demand only (not periodically polled) - driven by the ForecastTimeline
 # widget when the user picks a satellite/ground station/date. Returns the
@@ -59,9 +65,7 @@ COMMAND VEGA GET_DAY_DETAIL BIG_ENDIAN "Poll one satellite+ground_station+day's 
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/organizations/<%= vega_org_id %>/forecasting/day_detail"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "DAY_DETAIL"
-  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "AUTH_ERROR"
-  PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "Bearer <%= vega_api_token %>"
-  PARAMETER HTTP_HEADER_CONNECTION 0 0 DERIVED nil nil "close"
+  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
   APPEND_PARAMETER HTTP_QUERY_SATELLITE_ID 32 UINT MIN MAX 0 "Satellite id (from VEGA WORKSPACE SATELLITES_JSON)"
   APPEND_PARAMETER HTTP_QUERY_GROUND_STATION_ID 32 UINT MIN MAX 0 "Ground station id (from VEGA WORKSPACE GROUND_STATIONS_JSON)"
   APPEND_PARAMETER HTTP_QUERY_DATE 256 STRING "2026-01-01" "Date to query, YYYY-MM-DD"
@@ -76,9 +80,7 @@ COMMAND VEGA GET_HISTORY BIG_ENDIAN "Poll historical interference for one satell
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/organizations/<%= vega_org_id %>/forecasting/history"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "HISTORY"
-  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "AUTH_ERROR"
-  PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "Bearer <%= vega_api_token %>"
-  PARAMETER HTTP_HEADER_CONNECTION 0 0 DERIVED nil nil "close"
+  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
   APPEND_PARAMETER HTTP_QUERY_SATELLITE_ID 32 UINT MIN MAX 0 "Satellite id (from VEGA WORKSPACE SATELLITES_JSON)"
   APPEND_PARAMETER HTTP_QUERY_GROUND_STATION_ID 32 UINT MIN MAX 0 "Ground station id (from VEGA WORKSPACE GROUND_STATIONS_JSON)"
   APPEND_PARAMETER HTTP_QUERY_START_TIME 256 STRING "2026-01-01T00:00:00Z" "Range start, ISO8601 (inclusive)"

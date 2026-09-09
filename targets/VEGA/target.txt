@@ -1,1 +1,10 @@
 LANGUAGE ruby
+
+# Hide the HttpClientInterface plumbing from Command Sender / Command Sequence /
+# Script Runner completion so only real parameters (the GET_DAY_DETAIL and
+# GET_HISTORY query values) are shown. These are display hints only - scripts
+# and the Timeline widget can still pass HTTP_PATH etc. explicitly.
+IGNORE_PARAMETER HTTP_PATH
+IGNORE_PARAMETER HTTP_METHOD
+IGNORE_PARAMETER HTTP_PACKET
+IGNORE_PARAMETER HTTP_ERROR_PACKET

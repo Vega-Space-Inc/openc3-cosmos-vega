@@ -13,12 +13,34 @@ COSMOS telemetry:
   plus the first satellite's most recent forecast day (max intensity,
   severity, event count)
 
-`HEALTH` and `APPROVED_ORGS` are always polled. `WORKSPACE` and
-`FORECASTING_SUMMARY` only poll once `vega_org_id` is set to a nonzero org
-id (see Setup). All polling happens on an interval (`vega_poll_period`,
-default 30s) via `HttpClientInterface`. See
-`targets/VEGA/screens/status.txt` for a ready-made screen, or add the items
-to Telemetry Grapher / Packet Viewer.
+All four packets are fetched once when `VEGA_INT` connects (so the CVT is
+populated immediately) and then re-polled on two cadences via
+`HttpClientInterface`:
+
+- `vega_poll_period` (default 120 s) - `HEALTH` and `FORECASTING_SUMMARY`
+- `vega_slow_poll_period` (default 3600 s) - `APPROVED_ORGS` and
+  `WORKSPACE`, which change on the order of days
+
+Set either to `0` to disable that periodic poll (the connect-time fetch still
+runs). `WORKSPACE` and `FORECASTING_SUMMARY` only poll once `vega_org_id` is
+set to a nonzero org id (see Setup). Request timeouts are `vega_read_timeout`
+(default 30 s) and `vega_connect_timeout` (default 10 s).
+
+Any non-2xx response from any command is routed to `VEGA ERROR_RESPONSE`
+instead of the success packet: `HTTP_STATUS` carries the code (401 = bad or
+missing key, 403 = no approved access to `vega_org_id`, 404 = unknown org or
+no data in range, 429 = rate limited) and `BODY` the raw, unparsed response
+(Vega returns HTML for some errors). `HTTP_STATUS` on every packet has limits
+so anything outside 2xx shows red, `FORECASTING_SUMMARY RUN_STALE` shows
+`OK` (green) / `STALE` (yellow), and `FIRST_SAT_DAY_MAX_SEVERITY` is coloured
+low / medium / high. See `targets/VEGA/screens/status.txt` for a ready-made
+screen, or add the items to Telemetry Grapher / Packet Viewer.
+
+Decommutated command and telemetry records are retained for 30 days
+(`CMD_DECOM_RETAIN_TIME` / `TLM_DECOM_RETAIN_TIME` in `plugin.txt`):
+`WORKSPACE` and `FORECASTING_SUMMARY` carry whole JSON arrays on every poll,
+so unbounded retention grows fast. Raise it in `plugin.txt` if you need more
+history.
 
 ## Setup
 
@@ -26,20 +48,35 @@ This plugin authenticates with a **frontend API key** (`vgk_...` prefix,
 scoped to one Vega user), not an account-level API token - the two are
 different credential types and are not interchangeable.
 
+The key is never part of the plugin configuration. It is stored as a COSMOS
+secret and injected into the `Authorization` header by a write protocol
+(`targets/VEGA/lib/api_key_protocol.rb`) after each command has been logged,
+so it does not appear in plugin variables, command definitions, the command
+log, or Command Sender.
+
 1. Create a frontend API key in the Vega app under your account's API Keys
    page
-2. Install this plugin (see below) with that key as `vega_api_token` and
-   `vega_org_id` left at its default (`0`)
-3. Open the VEGA target's `Status` screen - `VEGA APPROVED_ORGS HTTP_STATUS`
+2. In COSMOS open **Admin -> Secrets** and add a secret named `VEGA_API_KEY`
+   whose value is that key (just the `vgk_...` string, no `Bearer ` prefix)
+3. Install this plugin (see below) with `vega_org_id` left at its default
+   (`0`). If the plugin was already installed before the secret existed,
+   disconnect and reconnect `VEGA_INT` (or reinstall) so the interface
+   container picks it up - a missing secret logs
+   `VEGA_API_KEY not set - create it in Admin / Secrets and restart VEGA_INT`
+   once and every authenticated request lands in `ERROR_RESPONSE` with
+   `HTTP_STATUS` 401
+4. Open the VEGA target's `Status` screen - `VEGA APPROVED_ORGS HTTP_STATUS`
    should read 200, and `FIRST_ORG_ID` / `FIRST_ORG_NAME` show one of your
    approved organizations. (Or run `GET /api/v1/frontend/organization_requests/approved_organizations`
    yourself to see the full list - a key's user can have several approved orgs.)
-4. Reinstall/reconfigure the plugin with `vega_org_id` set to the org id you
+   `targets/VEGA/procedures/procedure.rb` does this check from Script Runner
+   and then walks the status-screen alerts with injected telemetry.
+5. Reinstall/reconfigure the plugin with `vega_org_id` set to the org id you
    want `WORKSPACE` and `FORECASTING_SUMMARY` to poll
 
-**Note:** the key is stored as plain plugin config (visible to any COSMOS
-admin, same as any other plugin variable) - not a hardened secrets-store
-integration. Scope/rotate it in the Vega app accordingly.
+To rotate the key, change the secret's value in Admin -> Secrets and
+reconnect `VEGA_INT`; no plugin reinstall is needed. Revoke it in the Vega app
+if this COSMOS instance is ever decommissioned.
 
 ## Extending
 
