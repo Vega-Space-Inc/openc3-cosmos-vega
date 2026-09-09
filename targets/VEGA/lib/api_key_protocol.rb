@@ -65,7 +65,11 @@ module OpenC3
     def write_data(data, extra = nil)
       extra ||= {}
       headers = extra['HTTP_HEADERS'] || {}
-      token = headers.delete(@header) # scrubbed from the logged packet
+      # HttpAccessor stores HTTP_HEADER_<NAME> parameters under the
+      # lower-cased name ('authorization'), so match case-insensitively -
+      # header names are case-insensitive on the wire anyway.
+      stored = headers.keys.find { |k| k.to_s.casecmp?(@header) }
+      token = stored ? headers.delete(stored) : nil # scrubbed from the logged packet
       token = nil if token.nil? or token.to_s.strip.empty?
 
       wire_headers = headers.dup
