@@ -21,17 +21,17 @@ Gem::Specification.new do |s|
     time = Time.now.strftime("%Y%m%d%H%M%S")
     s.version = '0.0.0' + ".#{time}"
   end
-  s.files = Dir.glob("{targets,lib,public,tools,microservices}/**/*") + %w(Rakefile README.md LICENSE.md plugin.txt)
+  s.files = Dir.glob("{targets,lib,public,tools,microservices}/**/*").reject { |f| f.end_with?(".map") } + %w(Rakefile README.md LICENSE.md plugin.txt)
 
   s.metadata = {
     # These fields are used when you submit your plugin to the OpenC3 Store at store.openc3.com
     # See this help page for more detail: https://store.openc3.com/help/guidelines
-    "source_code_uri" => "https://github.com/your-github/plugin-repo",
+    "source_code_uri" => "https://github.com/Vega-Space-Inc/openc3-cosmos-vega",
     "openc3_store_title" => "Vega Space",
     "openc3_store_description" => "Pulls satellite interference/coverage data from the Vega Space API into COSMOS telemetry.",
     "openc3_store_keywords" => "vega, satellite, interference, spectrum, rf, coverage",
     "openc3_store_image" => "public/store_img.png",
-    "openc3_cosmos_minimum_version" => "6.0.0", # OPTIONAL
+    "openc3_cosmos_minimum_version" => "7.3.0", # the @openc3/js-common used by the widget is 7.3.0; built and run against 7.3.1
     "openc3_store_access_type" => "public" # OPTIONAL
   }
 end
