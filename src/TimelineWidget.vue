@@ -3107,7 +3107,7 @@ export default {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-left: 14px;
+  margin-left: auto;
   padding: 2px 8px;
   border: none;
   border-radius: 999px;
@@ -3345,12 +3345,10 @@ export default {
   height: 46px;
   flex: none;
   display: flex;
-  /* bottom-aligned so the name sits on the lane's zero baseline, where the
-     trace actually lives, instead of floating mid-lane */
-  align-items: flex-end;
+  /* centred on the row, level with the middle of its cells */
+  align-items: center;
   justify-content: flex-start;
   padding-right: 6px;
-  padding-bottom: 3px;
   margin-bottom: 8px; /* LANE_GAP_PX - keeps labels level with the rows */
   cursor: pointer;
   transition: height 0.15s ease;
