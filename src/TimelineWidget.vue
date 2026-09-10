@@ -621,6 +621,20 @@
             </span>
           </div>
         </div>
+        <div v-if="emptyBandCount" class="empty-bands-row">
+          <div class="x-axis-spacer" />
+          <button
+            type="button"
+            class="empty-bands-btn"
+            @click="showEmptyBands = !showEmptyBands"
+          >
+            <v-icon size="15">{{
+              showEmptyBands ? 'mdi-chevron-up' : 'mdi-chevron-down'
+            }}</v-icon>
+            {{ showEmptyBands ? 'Hide' : 'Show' }} {{ emptyBandCount }}
+            {{ emptyBandCount === 1 ? 'band' : 'bands' }} with no data
+          </button>
+        </div>
         <!-- Ramp legend: slice colour (and height) is the interferer count
              relative to that band's own peak across the loaded days. -->
         <div class="ramp-legend">
@@ -1025,6 +1039,9 @@ export default {
       // Wall clock, ticked every 30s so the "now" line moves.
       nowMs: Date.now(),
       showAsiInfo: false,
+      // Rows for bands with nothing in the loaded window are hidden until
+      // the user asks for them.
+      showEmptyBands: false,
       // CSS px width of the lanes area, kept current by a ResizeObserver;
       // drives how many minutes each slice covers (see slotMinutes).
       laneWidthPx: 0,
@@ -1231,16 +1248,20 @@ export default {
       return (this.selectedSatellite && this.selectedSatellite.bands) || []
     },
     // Bands currently shown as lanes (the legend chips toggle these).
-    // Bands with data first (in the satellite's own order), then the ones
-    // with nothing in the loaded window, so the empty 'No data' rows sink
-    // to the bottom instead of splitting the chart.
+    // Bands with data first (in the satellite's own order); the ones with
+    // nothing in the loaded window are hidden behind the 'show bands with
+    // no data' control and, when shown, sit at the bottom.
     visibleBandList() {
       const visible = this.bands.filter((b) => this.visibleBands[b])
       const empty = this.emptyBands
-      return [
-        ...visible.filter((b) => !empty[b]),
-        ...visible.filter((b) => empty[b]),
-      ]
+      const withData = visible.filter((b) => !empty[b])
+      if (!this.showEmptyBands) return withData
+      return [...withData, ...visible.filter((b) => empty[b])]
+    },
+    emptyBandCount() {
+      return this.bands.filter(
+        (b) => this.visibleBands[b] && this.emptyBands[b],
+      ).length
     },
     // The WINDOW_DAYS-day sliding window, first day at windowOffsetDays
     // relative to today. `past` days are filled by GET_HISTORY (measured,
@@ -2388,6 +2409,7 @@ export default {
     // instant with no re-fetch.
     onPlotMouseDown(e) {
       this._wasDrag = false
+      this._dragBand = this.hoverBand // the row the drag starts on
       const rect = this.$refs.plot.getBoundingClientRect()
       this.dragStartPx = e.clientX - rect.left
       this.dragCurrentPx = this.dragStartPx
@@ -2446,6 +2468,10 @@ export default {
       const newEnd = this.viewStart + (endPx / rect.width) * span
       if (newEnd - newStart < 5) return // guard against zooming to near-nothing
       this.zoomRange = [Math.round(newStart), Math.round(newEnd)]
+      // A drag-zoom opens the band it was drawn on, like a click does.
+      if (this._dragBand && this.visibleBands[this._dragBand]) {
+        this.expandedBand = this._dragBand
+      }
     },
     resetZoom() {
       this.zoomRange = null
@@ -3209,6 +3235,25 @@ export default {
   height: 8px;
   border-radius: 2px;
   flex: none;
+}
+.empty-bands-row {
+  display: flex;
+  margin-top: 8px;
+}
+.empty-bands-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #4fc3f7;
+  font-size: 11px;
+  cursor: pointer;
+}
+.empty-bands-btn:hover {
+  text-decoration: underline;
 }
 .asi-info-btn {
   display: inline-flex;
