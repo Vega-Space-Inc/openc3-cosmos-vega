@@ -810,13 +810,10 @@
               v-for="mark in loading ? [] : axisMarks"
               :key="'mark-' + (mark.align || 'c') + mark.c"
               class="hour-mark"
-              :class="[
-                'align-' + (mark.align || 'center'),
-                { angled: mark.angled },
-              ]"
+              :class="['align-' + (mark.align || 'center'), { hot: mark.hot }]"
               :style="{
                 left: cToPct(mark.c) + '%',
-                top: (mark.tier ? 18 : 0) + 'px',
+                top: (mark.tier ? 15 : 0) + 'px',
               }"
             >
               <div v-for="(line, i) in mark.lines" :key="i">{{ line }}</div>
@@ -1914,77 +1911,40 @@ export default {
         marks.push({ c: vEnd, lines: [endLabel], align: 'end' })
         return marks
       }
-      // Several passes: one label per pass, centred under its box - the
-      // full range on one line, or the range stacked on two lines when the
-      // box is narrower. If every pass can be labelled that way without
-      // touching its neighbour, that's the axis. Otherwise the whole axis
-      // switches to angled labels (all of them, so it reads as one style):
-      // each pass's range runs down-left from its centre at 40 degrees,
-      // which needs only ~22px between passes; a pass closer than that to
-      // the previous labelled one goes unlabelled (the tooltip has it).
+      // Several passes: at rest, each pass shows just its start time under
+      // the box's left edge (a label that would run into the previous one
+      // is dropped). Hovering a pass replaces all of that with the hovered
+      // pass's start time at its left edge and end time at its right - the
+      // one pair you are looking at, with nothing else competing for the
+      // space. In the multi-station view the hovered row's own span is
+      // used, so the times are that station's.
       const pxPerUnit = px / span
       const charPx = this.use24h ? 7 : 6.6
       const width = (text) => text.length * charPx
-      const upright = []
-      let lastRight = -Infinity
-      let allFit = true
-      for (const s of segs) {
-        const boxPx = s.clen * pxPerUnit
-        const cx = s.cstart + s.clen / 2
-        const cpx = (cx - vStart) * pxPerUnit
-        const options = [
-          { lines: [`${s.startLabel} – ${s.endLabel}`] },
-          { lines: [s.startLabel, s.endLabel] },
+      const hov = this.hoverSpan || (this.hoverSlot && this.hoverSlot.seg) || null
+      if (hov) {
+        const a = this.formatHM(this.idxToDate(hov.startIdx))
+        const b = this.formatHM(this.idxToDate(hov.endIdx))
+        const c0 = hov.cstart
+        const c1 = hov.cstart + hov.clen
+        const boxPx = hov.clen * pxPerUnit
+        // both fit side by side, else the end time drops to a second line
+        const tier = boxPx >= width(a) + width(b) + 12 ? 0 : 1
+        return [
+          { c: c0, lines: [a], align: 'start', hot: true },
+          { c: c1, lines: [b], align: 'end', hot: true, tier },
         ]
-        let placed = null
-        for (const opt of options) {
-          const w = Math.max(...opt.lines.map(width))
-          if (w > boxPx + 10) continue
-          if (cpx - w / 2 < lastRight + 8) continue
-          placed = { c: cx, lines: opt.lines, align: 'center', w }
-          break
-        }
-        if (!placed) {
-          allFit = false
-          break
-        }
-        upright.push(placed)
-        lastRight = cpx + placed.w / 2
       }
-      if (allFit) return upright
-      // Angled: the start time hangs from the box's left edge and the end
-      // time from its right edge, both running down-left at 40 degrees.
-      // End times sit on a second tier (18px lower) so a narrow pass's two
-      // labels - and one pass's end next to the next pass's start - never
-      // share a tier; within a tier anchors need ~22px between them.
-      const angled = []
-      let lastStart = -Infinity
-      let lastEnd = -Infinity
+      const marks = []
+      let lastRight = -Infinity
       for (const s of segs) {
         const spx = (s.cstart - vStart) * pxPerUnit
-        const epx = spx + s.clen * pxPerUnit
-        if (spx >= lastStart + 22) {
-          angled.push({
-            c: s.cstart,
-            lines: [s.startLabel],
-            angled: true,
-            tier: 0,
-            w: width(s.startLabel),
-          })
-          lastStart = spx
-        }
-        if (epx >= lastEnd + 22) {
-          angled.push({
-            c: s.cstart + s.clen,
-            lines: [s.endLabel],
-            angled: true,
-            tier: 1,
-            w: width(s.endLabel),
-          })
-          lastEnd = epx
-        }
+        const w = width(s.startLabel)
+        if (spx < lastRight + 8) continue
+        marks.push({ c: s.cstart, lines: [s.startLabel], align: 'start' })
+        lastRight = spx + w
       }
-      return angled
+      return marks
     },
     // Each lane is scaled to ITS OWN band's peak, not a shared maximum -
     // severity is relative to the band (5 interferers on VHF can matter more
@@ -2079,15 +2039,10 @@ export default {
     },
     // Height of the axis strip: one line, two lines, or the drop of the
     // angled labels (their length projected at 40 degrees).
+    // One line; a hovered narrow pass's end time may drop to a second line
+    // and simply overflow into the space below rather than resize the row.
     axisHeightPx() {
-      const marks = this.axisMarks
-      if (marks.some((m) => m.angled)) {
-        const longest = Math.max(0, ...marks.map((m) => m.w || 0))
-        const rad = (40 * Math.PI) / 180
-        // drop of the longest label + the line's own height, from tier 1
-        return Math.ceil(longest * Math.sin(rad) + 14 * Math.cos(rad) + 18 + 4)
-      }
-      return marks.some((m) => m.lines && m.lines.length > 1) ? 30 : 16
+      return 16
     },
     // The drag-zoom selection in compressed units, or null when not
     // dragging (or the drag is still narrower than a click).
@@ -4724,12 +4679,10 @@ export default {
   height: 16px;
   margin-top: 14px;
 }
-/* Angled label: its right end pinned at the pass centre, running down and
-   to the left at 40 degrees */
-.hour-mark.angled {
-  transform: translateX(-100%) rotate(-40deg);
-  transform-origin: 100% 0;
-  text-align: right;
+/* The hovered pass's own start / end times */
+.hour-mark.hot {
+  opacity: 1;
+  font-weight: 600;
 }
 .x-axis-spacer {
   width: var(--label-w, 48px); /* .lanes-labels */
