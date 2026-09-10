@@ -831,11 +831,11 @@
             />
           </div>
         </div>
+        <!-- Full-width bar between the axis and the legend, edge to edge -->
         <div v-if="emptyBandCount" class="empty-bands-row">
-          <div class="x-axis-spacer" />
           <button
             type="button"
-            class="quiet-link"
+            class="empty-bands-cta"
             @click="showEmptyBands = !showEmptyBands"
           >
             {{ showEmptyBands ? 'Hide' : 'Show' }} {{ emptyBandCount }}
@@ -4193,8 +4193,6 @@ export default {
   justify-content: flex-start;
   gap: 10px;
   margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(128, 128, 128, 0.25);
   font-size: 11px;
   opacity: 0.8;
   white-space: nowrap;
@@ -4214,9 +4212,25 @@ export default {
   flex: none;
 }
 .empty-bands-row {
-  display: flex;
-  justify-content: center;
-  margin-top: 8px;
+  margin-top: 14px;
+}
+.empty-bands-cta {
+  display: block;
+  width: 100%;
+  padding: 8px 0;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+}
+.empty-bands-cta:hover {
+  opacity: 1;
+  color: #4fc3f7;
+  background: rgba(255, 255, 255, 0.03);
 }
 /* Quiet text actions (Reset zoom, show/hide bands with no data): plain
    muted text that only takes on the link colour when hovered */
