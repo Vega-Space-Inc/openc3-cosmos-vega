@@ -502,14 +502,6 @@
             @mousemove="onPlotHover"
             @mouseleave="onPlotLeave"
           >
-            <!-- Hovered cell's backdrop. An earlier sibling of the lanes so it
-                 paints beneath the bars; the matching cell's border is lit
-                 via .pass-cell.active. -->
-            <div
-              v-if="hoverCell"
-              class="cell-highlight"
-              :style="hoverCell.style"
-            />
             <!-- While a load is in flight the rows shimmer and nothing else
                  is drawn: the chart appears whole when every station and
                  day has landed, instead of re-flowing as each one does. -->
@@ -545,6 +537,12 @@
                   <!-- One path per ramp step, each a run of narrow rects
                      rising from the baseline with a gap between neighbours.
                      The viewBox does the horizontal scaling on zoom. -->
+                  <!-- Hovered cell's backdrop, beneath the bars -->
+                  <rect
+                    v-if="hoverSpan && hoverSpan.key === band"
+                    v-bind="svgRect(hoverSpan, band)"
+                    fill="rgba(255, 255, 255, 0.08)"
+                  />
                   <g :opacity="hoverBand && hoverBand !== band ? 0.3 : 1">
                     <g
                       :opacity="
@@ -587,6 +585,24 @@
                       vector-effect="non-scaling-stroke"
                     />
                   </g>
+                  <!-- One outline per covered span: the box hugs the minutes
+                       this station has in the pass. Drawn here rather than
+                       as an HTML overlay so it shares the bars' geometry. -->
+                  <template v-if="!emptyBands[rowBand(band)]">
+                    <rect
+                      v-for="span in rowSpans[band] || []"
+                      :key="'outline-' + span.id"
+                      v-bind="svgRect(span, band)"
+                      fill="none"
+                      :stroke="
+                        hoverSpan && hoverSpan.id === span.id
+                          ? 'rgba(255, 255, 255, 0.75)'
+                          : 'rgba(128, 128, 128, 0.35)'
+                      "
+                      stroke-width="1"
+                      vector-effect="non-scaling-stroke"
+                    />
+                  </template>
                 </svg>
               </div>
             </div>
@@ -2074,6 +2090,14 @@ export default {
       if (!span) return null
       return { band, spanId: span.id, style: this.spanStyle(span) }
     },
+    hoverSpan() {
+      const cell = this.hoverCell
+      if (!cell) return null
+      return (
+        (this.rowSpans[cell.band] || []).find((sp) => sp.id === cell.spanId) ||
+        null
+      )
+    },
     // The hovered slice per band, ready to redraw on top of the dimmed lane.
     hoverSlices() {
       const slot = this.hoverSlot
@@ -2905,6 +2929,21 @@ export default {
           (sp) => idx >= sp.startIdx && idx < sp.endIdx,
         ) || null
       )
+    },
+    // A span's rect in the row SVG's user units, inset by half a pixel on
+    // every side so the 1px non-scaling stroke stays inside the row.
+    svgRect(span, band) {
+      const view = Math.max(1, this.viewEnd - this.viewStart)
+      const uxPerPx = view / (this.laneWidthPx || 1200)
+      const rowPx = this.rowHeightPx(band) || 1
+      const vbH = CHART_H * (1 + LANE_HEADROOM)
+      const uyPerPx = vbH / rowPx
+      return {
+        x: span.cstart + uxPerPx * 0.5,
+        y: -CHART_H * LANE_HEADROOM + uyPerPx * 0.5,
+        width: Math.max(0, span.clen - uxPerPx),
+        height: Math.max(0, vbH - uyPerPx),
+      }
     },
     spanWidthPx(span) {
       const view = Math.max(1, this.viewEnd - this.viewStart)
@@ -4295,20 +4334,12 @@ export default {
   position: absolute;
   box-sizing: border-box;
   overflow: hidden;
-  /* An inset shadow rather than a border: it paints on top of the bars
-     that sit on the row's baseline, so the bottom edge never disappears
-     under a full-height bar or a row of stubs */
-  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.3);
+  /* The outline itself is drawn inside the row's SVG (see svgRect); this
+     element only carries the Clear / No data note */
   border-radius: 3px;
   pointer-events: none;
   z-index: 3;
   transition: height 0.15s ease;
-}
-.pass-cell.active {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
-}
-.pass-cell.placeholder {
-  box-shadow: none;
 }
 /* While busy, each control stays in the layout (so it keeps its exact
    width) but is hidden under a shimmer of the same size */
@@ -4388,13 +4419,6 @@ export default {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   opacity: 0.45;
-  pointer-events: none;
-}
-.cell-highlight {
-  position: absolute;
-  box-sizing: border-box;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
   pointer-events: none;
 }
 .hover-tooltip-row-active {
