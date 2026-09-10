@@ -179,14 +179,27 @@
             item-title="label"
             item-value="id"
             multiple
-            chips
-            closable-chips
             density="compact"
             hide-details
             variant="outlined"
             style="max-width: 360px"
             :disabled="loading || workspaceLoading"
-          />
+          >
+            <!-- Two chips, then '+N': the field stays one line high -->
+            <template #selection="{ item, index }">
+              <v-chip
+                v-if="index < 2"
+                size="small"
+                closable
+                @click:close.stop="removeStation(item.value)"
+              >
+                {{ item.title }}
+              </v-chip>
+              <span v-else-if="index === 2" class="more-selected"
+                >+{{ selectedGroundStationIds.length - 2 }}</span
+              >
+            </template>
+          </v-select>
           <v-btn
             color="primary"
             variant="flat"
@@ -2810,6 +2823,11 @@ export default {
       }
       return d
     },
+    removeStation(id) {
+      this.selectedGroundStationIds = this.selectedGroundStationIds.filter(
+        (v) => v !== id,
+      )
+    },
     rowBand(key) {
       return String(key).split('|')[0]
     },
@@ -3737,6 +3755,16 @@ export default {
 }
 .controls-row :deep(.v-select__selection) {
   align-items: center;
+}
+.controls-row :deep(.v-select .v-field__input) {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.more-selected {
+  font-size: 12px;
+  opacity: 0.8;
+  white-space: nowrap;
+  margin-left: 2px;
 }
 .controls-row :deep(.v-chip) {
   height: 20px;
