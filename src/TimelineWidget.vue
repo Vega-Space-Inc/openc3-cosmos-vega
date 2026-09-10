@@ -305,6 +305,16 @@
               >
                 <v-list-item-title>API Settings</v-list-item-title>
               </v-list-item>
+              <v-divider />
+              <v-list-item>
+                <v-switch
+                  v-model="use24h"
+                  label="24-hour time"
+                  density="compact"
+                  hide-details
+                  color="secondary"
+                />
+              </v-list-item>
               <v-list-item disabled density="compact">
                 <v-list-item-title class="build-stamp"
                   >Widget build {{ BUILD_STAMP }}</v-list-item-title
@@ -771,7 +781,7 @@
           </div>
         </div>
 
-        <div class="x-axis-row">
+        <div class="x-axis-row" :class="{ 'two-line': axisTwoLine }">
           <div class="x-axis-spacer" />
           <div class="x-axis">
             <span
@@ -781,7 +791,7 @@
               :class="'align-' + (mark.align || 'center')"
               :style="{ left: cToPct(mark.c) + '%' }"
             >
-              {{ mark.label }}
+              <div v-for="(line, i) in mark.lines" :key="i">{{ line }}</div>
             </span>
             <!-- Small tick in each gap between passes, separating one
                  pass's start/end times from the next's -->
@@ -1138,6 +1148,15 @@ const VEGA_APP_URL = 'https://app.vega.space'
 // so that would expose it to every user) - see authOverride().
 const API_KEY_LS_KEY = 'vega_widget_api_key'
 const SIZE_LS_KEY = 'vega_widget_size'
+const TIME_24H_LS_KEY = 'vega_widget_24h'
+function readStoredFlag(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw === null ? fallback : raw === '1'
+  } catch (e) {
+    return fallback
+  }
+}
 function readStoredSize() {
   try {
     const raw = localStorage.getItem(SIZE_LS_KEY)
@@ -1278,6 +1297,9 @@ export default {
       BAR_COLORS,
       // COSMOS 'time_zone' setting - see the Time zone block up top.
       timeZone: 'local',
+      // 24-hour (default) or 12-hour clock for every time label; remembered
+      // per browser.
+      use24h: readStoredFlag(TIME_24H_LS_KEY, true),
       // Wall clock, ticked every 30s so the "now" line moves.
       nowMs: Date.now(),
       showAsiInfo: false,
@@ -1823,7 +1845,7 @@ export default {
       if (only) {
         const seg = only
         // About a dozen ticks across the view, never closer than ~70px.
-        const rough = Math.max(span / 12, (span * 70) / px)
+        const rough = Math.max(span / 12, (span * (this.use24h ? 70 : 90)) / px)
         let interval = TICK_INTERVALS[TICK_INTERVALS.length - 1]
         for (const opt of TICK_INTERVALS) {
           if (rough <= opt) {
@@ -1841,28 +1863,51 @@ export default {
           return idx === seg.endIdx && hm === '00:00' ? '24:00' : hm
         }
         const marks = [
-          { c: vStart, label: labelAt(toIdx(vStart)), align: 'start' },
+          { c: vStart, lines: [labelAt(toIdx(vStart))], align: 'start' },
         ]
         const first = Math.ceil(toIdx(vStart) / interval) * interval
         for (let idx = first; idx < toIdx(vEnd); idx += interval) {
           const c = seg.cstart + (idx - seg.startIdx)
           if (c - vStart < interval / 4 || vEnd - c < interval / 4) continue
-          marks.push({ c, label: labelAt(idx) })
+          marks.push({ c, lines: [labelAt(idx)] })
         }
-        marks.push({ c: vEnd, label: labelAt(toIdx(vEnd)), align: 'end' })
+        marks.push({ c: vEnd, lines: [labelAt(toIdx(vEnd))], align: 'end' })
         return marks
       }
-      // Each pass is its own little chart: start time on its left edge, end
-      // time on its right, pass number centred above. A box too narrow for
-      // two times keeps only its start time.
+      // Several passes: one label per pass, centred under its box, showing
+      // as much as fits - the full range on one line, the range stacked on
+      // two lines, the start time alone, or nothing (the tooltip still has
+      // it). Labels are then placed left to right and any that would run
+      // into the previous one is shrunk until it fits, or dropped.
       const pxPerUnit = px / span
-      return segs.flatMap((s) => {
-        const marks = [{ c: s.cstart, label: s.startLabel, align: 'start' }]
-        if (s.clen * pxPerUnit >= 72) {
-          marks.push({ c: s.cstart + s.clen, label: s.endLabel, align: 'end' })
+      const charPx = this.use24h ? 7 : 6.6
+      const width = (text) => text.length * charPx
+      const marks = []
+      let lastRight = -Infinity
+      for (const s of segs) {
+        const boxPx = s.clen * pxPerUnit
+        const cx = s.cstart + s.clen / 2
+        const cpx = (cx - vStart) * pxPerUnit
+        const options = [
+          { lines: [`${s.startLabel} – ${s.endLabel}`] },
+          { lines: [s.startLabel, s.endLabel] },
+          { lines: [s.startLabel] },
+        ]
+        let placed = null
+        for (const opt of options) {
+          const w = Math.max(...opt.lines.map(width))
+          // must fit its own box (plus a little air) and clear the last label
+          if (w > boxPx + 10) continue
+          if (cpx - w / 2 < lastRight + 8) continue
+          placed = { c: cx, lines: opt.lines, align: 'center', w }
+          break
         }
-        return marks
-      })
+        if (placed) {
+          marks.push(placed)
+          lastRight = cpx + placed.w / 2
+        }
+      }
+      return marks
     },
     // Each lane is scaled to ITS OWN band's peak, not a shared maximum -
     // severity is relative to the band (5 interferers on VHF can matter more
@@ -1954,6 +1999,9 @@ export default {
         result[b] = this.expandedBand === b ? 200 : base
       }
       return result
+    },
+    axisTwoLine() {
+      return this.axisMarks.some((m) => m.lines && m.lines.length > 1)
     },
     // The drag-zoom selection in compressed units, or null when not
     // dragging (or the drag is still narrower than a click).
@@ -2373,6 +2421,13 @@ export default {
         if (this.selectedSatelliteId) this.loadForecast()
       },
       deep: true,
+    },
+    use24h(v) {
+      try {
+        localStorage.setItem(TIME_24H_LS_KEY, v ? '1' : '0')
+      } catch (e) {
+        // ignore
+      }
     },
     async tlmTarget(target) {
       if (this._restoringTlm) return
@@ -2944,7 +2999,9 @@ export default {
     },
     formatHM(date) {
       const p = zoneParts(date.getTime(), this.timeZone)
-      return `${pad2(p.hh)}:${pad2(p.mm)}`
+      if (this.use24h) return `${pad2(p.hh)}:${pad2(p.mm)}`
+      const h12 = p.hh % 12 || 12
+      return `${h12}:${pad2(p.mm)} ${p.hh < 12 ? 'AM' : 'PM'}`
     },
     // Rounds a raw max up to a "nice" round number (1/2/5 x10^n) so y-axis
     // ticks land on sensible values instead of awkward fractions.
@@ -4545,6 +4602,9 @@ export default {
   height: 16px;
   margin-top: 8px;
 }
+.x-axis-row.two-line {
+  height: 30px;
+}
 .x-axis-spacer {
   width: var(--label-w, 48px); /* .lanes-labels */
   flex: none;
@@ -4728,9 +4788,12 @@ export default {
   position: absolute;
   top: 0;
   transform: translateX(-50%);
-  font-size: 11px;
-  opacity: 0.75;
+  font-size: 12px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
   white-space: nowrap;
+  text-align: center;
 }
 .axis-divider {
   position: absolute;
