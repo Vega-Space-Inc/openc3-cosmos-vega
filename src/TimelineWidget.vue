@@ -269,6 +269,11 @@
               >
                 <v-list-item-title>API Settings</v-list-item-title>
               </v-list-item>
+              <v-list-item disabled density="compact">
+                <v-list-item-title class="build-stamp"
+                  >Widget build {{ BUILD_STAMP }}</v-list-item-title
+                >
+              </v-list-item>
             </v-list>
           </v-menu>
         </div>
@@ -1233,6 +1238,7 @@ export default {
       CHART_H,
       LANE_HEADROOM,
       RAMP_COLORS,
+      BUILD_STAMP: typeof __VEGA_WIDGET_BUILD__ === 'string' ? __VEGA_WIDGET_BUILD__ : 'dev',
       BAR_COLORS,
       // COSMOS 'time_zone' setting - see the Time zone block up top.
       timeZone: 'local',
@@ -3981,6 +3987,10 @@ export default {
 }
 .empty-bands-btn:hover {
   text-decoration: underline;
+}
+.build-stamp {
+  font-size: 11px;
+  opacity: 0.6;
 }
 .asi-info-btn {
   display: inline-flex;

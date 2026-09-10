@@ -5,6 +5,13 @@ import vue from '@vitejs/plugin-vue'
 const DEFAULT_EXTENSIONS = ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json']
 
 export default defineConfig({
+  // Build stamp shown in the widget's settings menu, so a stale cached
+  // bundle in the browser is obvious at a glance.
+  define: {
+    __VEGA_WIDGET_BUILD__: JSON.stringify(
+      new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
+    ),
+  },
   // public/ belongs to the gem (the store image), not to this build -- without
   // this Vite would copy it into the widget output directory.
   publicDir: false,
