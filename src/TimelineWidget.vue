@@ -424,18 +424,15 @@
           >
             Load measured history
           </v-btn>
-          <!-- Loading / error text lives here: the box can shrink (min-width
-               0, ellipsis) so a long message never widens the widget or
-               adds a line -->
+          <!-- Errors only: the shimmer rows already say "loading". The box
+               can shrink (min-width 0, ellipsis) so a long message never
+               widens the widget or adds a line. -->
           <span
-            v-if="workspaceLoading || loading || errorText"
-            class="status-text"
-            :class="{ 'error-text': !!errorText && !loading }"
-            :title="errorText || progressText"
+            v-if="errorText && !loading"
+            class="status-text error-text"
+            :title="errorText"
           >
-            <template v-if="workspaceLoading">Loading workspace…</template>
-            <template v-else-if="loading">{{ progressText }}</template>
-            <template v-else>{{ errorText }}</template>
+            {{ errorText }}
           </span>
           <button
             v-if="zoomRange"
