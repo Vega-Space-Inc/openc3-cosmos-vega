@@ -2698,16 +2698,6 @@ export default {
       let done = 0
       const failures = []
       try {
-        if (missingPast.length) {
-          this.progressText = `Loading history (0/${total}) - Vega can take ~40s`
-          try {
-            await this.loadHistory(satId, gsId, gen, missingPast, range)
-          } catch (e) {
-            failures.push(`history: ${e.message}`)
-          }
-          if (gen !== this._forecastGen) return
-          done++
-        }
         for (const day of missingForecast) {
           this.progressText = `Loading ${day.date} (${done}/${total})`
           // Small pacing gap between requests - spreads the batch out to
@@ -2732,6 +2722,20 @@ export default {
             if (gen !== this._forecastGen) return
             failures.push(`${day.date}: ${e.message}`)
           }
+          done++
+        }
+        // History LAST: the forecast/today request answers in ~5s and
+        // draws the chart; Vega's measured-history build takes 30-45s and
+        // the interface is a serial pipe, so anything queued behind it
+        // waits that long. The past minutes fill in when they arrive.
+        if (missingPast.length) {
+          this.progressText = `Loading measured history (Vega can take ~40s)`
+          try {
+            await this.loadHistory(satId, gsId, gen, missingPast, range)
+          } catch (e) {
+            failures.push(`history: ${e.message}`)
+          }
+          if (gen !== this._forecastGen) return
           done++
         }
         this.progressText = ''
