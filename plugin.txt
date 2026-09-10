@@ -24,8 +24,10 @@ TARGET VEGA VEGA
   CMD_DECOM_RETAIN_TIME 30d
   TLM_DECOM_RETAIN_TIME 30d
 
-# HttpClientInterface args: hostname port protocol write_timeout read_timeout connect_timeout
-INTERFACE VEGA_INT http_client_interface.rb <%= vega_hostname %> <%= vega_port %> <%= vega_protocol %> 5.0 <%= vega_read_timeout %> <%= vega_connect_timeout %>
+# VegaHttpClientInterface = COSMOS's HttpClientInterface plus recovery from an
+# in-process disconnect (see targets/VEGA/lib/vega_http_client_interface.rb).
+# Args: hostname port protocol write_timeout read_timeout connect_timeout
+INTERFACE VEGA_INT vega_http_client_interface.rb <%= vega_hostname %> <%= vega_port %> <%= vega_protocol %> 5.0 <%= vega_read_timeout %> <%= vega_connect_timeout %>
   MAP_TARGET VEGA
   # Auth: users normally enter their own Vega API key on the dashboard (the
   # Timeline widget sends it per request, obfuscated). SECRET is the optional
