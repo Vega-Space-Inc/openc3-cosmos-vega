@@ -34,7 +34,6 @@
   <div
     ref="root"
     class="timeline-widget"
-    :class="{ sized: !!userSize }"
     :style="[
       computedStyle,
       userSizeStyle,
@@ -832,11 +831,6 @@ const PASS_GAP_PX = 5
 // Vertical gap between band rows - the same size as the gap between
 // passes, so the chart reads as a grid of (pass x band) cells.
 const LANE_GAP_PX = 5
-// Tallest a collapsed band row grows when the widget has a user-set height.
-// Without a cap a tall widget shared its whole lanes area between the rows
-// (~325px each on a full-height screen); a third of that keeps the
-// collapsed view a row of sparklines and leaves "large" to the expanded band.
-const COLLAPSED_MAX_PX = 110
 // Context minutes on each side of a pass. Zero: slices (unlike the old
 // lines) don't need to rise from a baseline, and any padding is dead space
 // inside the box.
@@ -1050,10 +1044,8 @@ function readStoredSize() {
   try {
     const raw = localStorage.getItem(SIZE_LS_KEY)
     if (!raw) return null
-    const { w, h } = JSON.parse(raw)
-    return Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0
-      ? { w, h }
-      : null
+    const { w } = JSON.parse(raw)
+    return Number.isFinite(w) && w > 0 ? { w } : null
   } catch (e) {
     return null
   }
@@ -1766,7 +1758,7 @@ export default {
     },
     userSizeStyle() {
       if (!this.userSize) return {}
-      return { width: `${this.userSize.w}px`, height: `${this.userSize.h}px` }
+      return { width: `${this.userSize.w}px` }
     },
     // Band row height in px. Automatic: 46 (220 expanded). With a user-set
     // height the rows share the lanes area: all rows grow equally up to
@@ -1775,30 +1767,13 @@ export default {
     // or, with a band expanded, the others stay at 46 and the expanded one
     // takes the rest. Never below the automatic sizes, so a short window
     // scrolls rather than squashing the bars.
+    // Band row height in px: 46 (32 with several stations), 220 expanded.
+    // Fixed - a taller widget adds room below the grid, never taller rows.
     rowHeights() {
-      const bands = this.rowKeys
-      const n = bands.length
-      // Several stations multiply the rows, so each one gets shorter.
       const base = this.multiStation ? 32 : 46
-      const baseExpanded = 220
       const result = {}
-      if (!this.userSize || !n || !this.laneAreaPx) {
-        for (const b of bands) {
-          result[b] = this.expandedBand === b ? baseExpanded : base
-        }
-        return result
-      }
-      const gaps = bands.reduce((sum, k) => sum + this.rowGap(k), 0)
-      if (this.expandedBand && bands.includes(this.expandedBand)) {
-        const rest = this.laneAreaPx - gaps - (n - 1) * base
-        for (const b of bands) {
-          result[b] =
-            this.expandedBand === b ? Math.max(baseExpanded, rest) : base
-        }
-      } else {
-        const share = Math.floor((this.laneAreaPx - gaps) / n)
-        const each = Math.max(base, Math.min(COLLAPSED_MAX_PX, share))
-        for (const b of bands) result[b] = each
+      for (const b of this.rowKeys) {
+        result[b] = this.expandedBand === b ? 220 : base
       }
       return result
     },
@@ -2312,7 +2287,7 @@ export default {
         const el = this.$refs.root
         if (!el) return
         const r = el.getBoundingClientRect()
-        const size = { w: Math.round(r.width), h: Math.round(r.height) }
+        const size = { w: Math.round(r.width) }
         this.userSize = size
         try {
           localStorage.setItem(SIZE_LS_KEY, JSON.stringify(size))
@@ -3702,20 +3677,12 @@ export default {
   gap: 8px;
   padding: 8px;
   min-width: 700px;
-  min-height: 360px;
   box-sizing: border-box;
   color: var(--v-theme-on-surface, inherit);
-  /* Browser resize grip in the bottom-right corner (see onRootMouseDown) */
-  resize: both;
+  /* Browser resize grip in the bottom-right corner (see onRootMouseDown):
+     width only - the rows have fixed heights */
+  resize: horizontal;
   overflow: auto;
-}
-/* With a user-set height the lanes area takes whatever the controls and
-   legend leave, and the band rows share it (rowHeights) */
-.timeline-widget.sized .lanes-wrap {
-  flex: 1 0 auto;
-}
-.timeline-widget.sized .lanes-body {
-  flex: 1 0 auto;
 }
 .controls-col {
   display: flex;
