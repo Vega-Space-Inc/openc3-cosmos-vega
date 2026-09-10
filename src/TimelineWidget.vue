@@ -439,7 +439,11 @@
             v-for="g in multiStation ? bandGroups : []"
             :key="'group-' + g.band"
             class="band-group-bg"
-            :style="{ top: g.top + 'px', height: g.height + 'px' }"
+            :style="{
+              top: g.top + 'px',
+              height: g.height + 'px',
+              background: bandTint(g.band, 0.09),
+            }"
           />
           <div class="lanes-labels" :style="{ height: gridHeightPx + 'px' }">
             <!-- Band header: one bordered, tinted block per band spanning
@@ -449,7 +453,15 @@
               :key="'band-' + g.band"
               class="band-block"
               :class="{ hovered: hoverBand && rowBand(hoverBand) === g.band }"
-              :style="{ top: g.rowTop + 'px', height: g.rowHeight + 'px' }"
+              :style="{
+                top: g.rowTop + 'px',
+                height: g.rowHeight + 'px',
+                background: bandTint(
+                  g.band,
+                  hoverBand && rowBand(hoverBand) === g.band ? 0.4 : 0.24,
+                ),
+                color: bandColor(g.band),
+              }"
             >
               {{ g.band }}
             </div>
@@ -1082,6 +1094,37 @@ function readStoredSize() {
 }
 // Width of the bottom-right corner that counts as the resize grip.
 const GRIP_PX = 20
+// Identity colour per band - for the band block and the tinted strip
+// behind its rows, never for the bars (those keep the severity ramp).
+// Hues stay clear of the ramp's green / amber / red.
+const BAND_COLORS = {
+  VHF: '#7e57c2',
+  UHF: '#42a5f5',
+  L: '#26a69a',
+  S: '#ec407a',
+  C: '#5c6bc0',
+  X: '#29b6f6',
+  Ku: '#ab47bc',
+  Ka: '#78909c',
+  mmWave: '#8d6e63',
+}
+function bandColor(band) {
+  if (BAND_COLORS[band]) return BAND_COLORS[band]
+  // Unknown band: a stable hue from its name
+  let h = 0
+  for (const ch of String(band)) h = (h * 31 + ch.charCodeAt(0)) % 360
+  return `hsl(${h}, 55%, 60%)`
+}
+function bandTint(band, alpha) {
+  const c = bandColor(band)
+  if (c.startsWith('#')) {
+    const r = parseInt(c.slice(1, 3), 16)
+    const g = parseInt(c.slice(3, 5), 16)
+    const b = parseInt(c.slice(5, 7), 16)
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+  return c.replace('hsl(', 'hsla(').replace(')', `, ${alpha})`)
+}
 // With several ground stations selected every band gets one row per
 // station; rows of one band sit LANE_GAP_PX apart and bands GROUP_GAP_PX.
 const GROUP_GAP_PX = 14
@@ -2851,6 +2894,8 @@ export default {
     rowBand(key) {
       return String(key).split('|')[0]
     },
+    bandColor,
+    bandTint,
     // The row's covered span containing minute idx, if any.
     spanAt(key, idx) {
       return (
@@ -4139,7 +4184,6 @@ export default {
   left: -8px;
   right: -8px;
   z-index: 0;
-  background: rgba(255, 255, 255, 0.025);
   pointer-events: none;
 }
 .lanes-labels,
@@ -4162,14 +4206,9 @@ export default {
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.07);
   font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.04em;
-  opacity: 0.85;
-}
-.band-block.hovered {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.12);
 }
 /* Per-row label (station name), right against the track; also the hover /
    click target for the row */
