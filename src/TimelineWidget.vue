@@ -1767,13 +1767,13 @@ export default {
     // or, with a band expanded, the others stay at 46 and the expanded one
     // takes the rest. Never below the automatic sizes, so a short window
     // scrolls rather than squashing the bars.
-    // Band row height in px: 46 (32 with several stations), 220 expanded.
+    // Band row height in px: 36 (24 with several stations), 200 expanded.
     // Fixed - a taller widget adds room below the grid, never taller rows.
     rowHeights() {
-      const base = this.multiStation ? 32 : 46
+      const base = this.multiStation ? 24 : 36
       const result = {}
       for (const b of this.rowKeys) {
-        result[b] = this.expandedBand === b ? 220 : base
+        result[b] = this.expandedBand === b ? 200 : base
       }
       return result
     },
@@ -2270,7 +2270,7 @@ export default {
   },
   methods: {
     rowHeightPx(band) {
-      return this.rowHeights[band] || (this.multiStation ? 32 : 46)
+      return this.rowHeights[band] || (this.multiStation ? 24 : 36)
     },
     inGrip(e) {
       const el = this.$refs.root
