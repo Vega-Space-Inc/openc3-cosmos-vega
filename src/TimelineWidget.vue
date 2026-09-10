@@ -1763,8 +1763,12 @@ export default {
       return `linear-gradient(90deg, ${RAMP_COLORS.join(', ')})`
     },
     // Room for band + station names when several stations are selected.
+    // Room for the band block, plus station names with several stations,
+    // plus the count ticks while a row is open (single-station view has no
+    // station column for them to share).
     labelWidthPx() {
-      return this.multiStation ? 176 : 52
+      if (this.multiStation) return 176
+      return this.expandedBand ? 96 : 52
     },
     userSizeStyle() {
       if (!this.userSize) return {}
