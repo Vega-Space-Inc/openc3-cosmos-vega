@@ -1202,7 +1202,9 @@ function bandTint(band, alpha) {
 }
 // With several ground stations selected every band gets one row per
 // station; rows of one band sit LANE_GAP_PX apart and bands GROUP_GAP_PX.
-const GROUP_GAP_PX = 14
+// Bands are far enough apart that, with each band's strip padded 8px above
+// and below its rows, 8px of plain background still shows between strips.
+const GROUP_GAP_PX = 24
 function readStoredApiKey() {
   try {
     return localStorage.getItem(API_KEY_LS_KEY) || null
