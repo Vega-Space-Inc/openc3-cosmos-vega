@@ -585,6 +585,28 @@
                   <!-- One path per ramp step, each a run of narrow rects
                      rising from the baseline with a gap between neighbours.
                      The viewBox does the horizontal scaling on zoom. -->
+                  <defs>
+                    <!-- Faint diagonal hatch for a pass that was observed
+                         and found clear (6px pitch whatever the zoom) -->
+                    <pattern
+                      :id="hatchId(band)"
+                      patternUnits="userSpaceOnUse"
+                      v-bind="hatchSize(band)"
+                    >
+                      <path
+                        :d="`M0,${hatchSize(band).height} L${hatchSize(band).width},0`"
+                        stroke="rgba(67, 160, 71, 0.16)"
+                        stroke-width="1"
+                        vector-effect="non-scaling-stroke"
+                      />
+                    </pattern>
+                  </defs>
+                  <rect
+                    v-for="span in clearSpans(band)"
+                    :key="'hatch-' + span.id"
+                    v-bind="svgRect(span, band)"
+                    :fill="`url(#${hatchId(band)})`"
+                  />
                   <!-- Hovered cell's backdrop, beneath the bars -->
                   <rect
                     v-if="hoverSpan && hoverSpan.key === band"
@@ -3072,6 +3094,22 @@ export default {
         ) || null
       )
     },
+    hatchId(key) {
+      return 'hatch-' + String(key).replace(/[^a-zA-Z0-9]/g, '_')
+    },
+    // 6px x 6px in the row SVG's (non-uniform) user units
+    hatchSize(key) {
+      const view = Math.max(1, this.viewEnd - this.viewStart)
+      const uxPerPx = view / (this.laneWidthPx || 1200)
+      const uyPerPx = (CHART_H * (1 + LANE_HEADROOM)) / (this.rowHeightPx(key) || 1)
+      return { width: 6 * uxPerPx, height: 6 * uyPerPx }
+    },
+    clearSpans(key) {
+      if (this.emptyBands[this.rowBand(key)]) return []
+      return (this.rowSpans[key] || []).filter(
+        (sp) => this.cellStatus[sp.id] === 'clear',
+      )
+    },
     // A span's rect in the row SVG's user units, inset by half a pixel on
     // every side so the 1px non-scaling stroke stays inside the row.
     svgRect(span, band) {
@@ -4608,7 +4646,7 @@ export default {
 .x-axis-row {
   display: flex;
   height: 16px;
-  margin-top: 8px;
+  margin-top: 14px;
 }
 .x-axis-row.two-line {
   height: 30px;
