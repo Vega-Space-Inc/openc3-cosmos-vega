@@ -436,10 +436,9 @@
                of rows (labels and plot alike) shows which rows belong
                together; the wider gap between groups stays untinted. -->
           <div
-            v-for="(g, i) in bandGroups"
+            v-for="g in bandGroups"
             :key="'group-' + g.band"
             class="band-group-bg"
-            :class="{ alt: i % 2 === 1 }"
             :style="{ top: g.top + 'px', height: g.height + 'px' }"
           />
           <div class="lanes-labels" :style="{ height: gridHeightPx + 'px' }">
@@ -4142,10 +4141,6 @@ export default {
   z-index: 0;
   background: rgba(255, 255, 255, 0.025);
   pointer-events: none;
-}
-/* Every other band a shade lighter, so neighbouring bands read apart */
-.band-group-bg.alt {
-  background: rgba(255, 255, 255, 0.065);
 }
 .lanes-labels,
 .lanes-plots {
