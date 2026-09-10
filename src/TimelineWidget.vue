@@ -395,21 +395,16 @@
            its shape), on the green -> amber -> red ramp. Collapsed lanes are
            numberless; clicking one expands it with that band's tick values. -->
       <div v-if="days.length && bands.length" class="lanes-wrap">
-        <!-- Pass numbers, centred over their boxes -->
-        <div v-if="passMarks.length" class="pass-row">
-          <div class="x-axis-spacer" />
-          <div class="pass-track">
-            <span
-              v-for="m in passMarks"
-              :key="'pass-' + m.c"
-              class="pass-label"
-              :style="{ left: cToPct(m.c) + '%' }"
-            >
-              {{ m.label }}
-            </span>
-          </div>
-        </div>
         <div class="lanes-body" @mouseleave="hoverBand = null">
+          <!-- With several stations, a faint band behind each band's group
+               of rows (labels and plot alike) shows which rows belong
+               together; the wider gap between groups stays untinted. -->
+          <div
+            v-for="g in bandGroups"
+            :key="'group-' + g.band"
+            class="band-group-bg"
+            :style="{ top: g.top + 'px', height: g.height + 'px' }"
+          />
           <div class="lanes-labels">
             <div
               v-for="band in rowKeys"
@@ -1910,6 +1905,31 @@ export default {
       }
       return result
     },
+    // Vertical extent of each band's group of rows (multi-station only).
+    bandGroups() {
+      if (!this.multiStation) return []
+      const groups = []
+      let current = null
+      for (const key of this.rowKeys) {
+        const band = this.rowBand(key)
+        const geo = this.rowGeometry[key]
+        if (!geo) continue
+        const top = parseFloat(geo.top)
+        const bottom = top + parseFloat(geo.height)
+        if (!current || current.band !== band) {
+          current = { band, top, bottom }
+          groups.push(current)
+        } else {
+          current.bottom = bottom
+        }
+      }
+      const pad = 4
+      return groups.map((g) => ({
+        band: g.band,
+        top: g.top - pad,
+        height: g.bottom - g.top + pad * 2,
+      }))
+    },
     allSpans() {
       return this.rowKeys.flatMap((key) => this.rowSpans[key] || [])
     },
@@ -1964,25 +1984,6 @@ export default {
         }
       }
       return result
-    },
-    // 'Pass N' over each pass box; none for a single day-long (GEO) pass.
-    passMarks() {
-      const segs = this.segments
-      if (segs.length < 2) return []
-      // Centred on the VISIBLE part of each pass, so a zoomed view keeps
-      // its labels inside the chart; a sliver too narrow to carry a label
-      // (under ~48px) gets none.
-      const vStart = this.viewStart
-      const vEnd = this.viewEnd
-      const pxPerUnit = (this.laneWidthPx || 1200) / Math.max(1, vEnd - vStart)
-      const marks = []
-      for (const s of segs) {
-        const a = Math.max(s.cstart, vStart)
-        const b = Math.min(s.cstart + s.clen, vEnd)
-        if (b <= a || (b - a) * pxPerUnit < 48) continue
-        marks.push({ c: (a + b) / 2, label: `Pass ${s.index}` })
-      }
-      return marks
     },
     dragSelectionStyle() {
       if (this.dragStartPx === null) return null
@@ -4003,10 +4004,25 @@ export default {
 .lanes-wrap {
   display: flex;
   flex-direction: column;
-  margin-top: 10px;
+  margin-top: 14px;
 }
 .lanes-body {
+  position: relative;
   display: flex;
+}
+.band-group-bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  pointer-events: none;
+}
+.lanes-labels,
+.lanes-plots {
+  position: relative;
+  z-index: 1;
 }
 .lanes-labels {
   width: var(--label-w, 48px);
@@ -4153,28 +4169,6 @@ export default {
   display: flex;
   height: 16px;
   margin-top: 8px;
-}
-.pass-row {
-  display: flex;
-  /* Label sits at the top; the rest is the gap to the grid, matched to the
-     gap between the band labels and their cells */
-  height: 30px;
-}
-.pass-track {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-.pass-label {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.75;
-  white-space: nowrap;
 }
 .x-axis-spacer {
   width: var(--label-w, 48px); /* .lanes-labels */
