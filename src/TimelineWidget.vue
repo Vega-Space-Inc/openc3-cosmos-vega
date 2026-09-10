@@ -3892,9 +3892,13 @@ export default {
 }
 .hour-mark.align-start {
   transform: none;
+  /* Equal clearance on both sides of the divider tick, which sits on the
+     centre line of the gap between passes */
+  padding-left: 6px;
 }
 .hour-mark.align-end {
   transform: translateX(-100%);
+  padding-right: 6px;
 }
 
 // Empty state: no working Vega connection yet
