@@ -435,9 +435,10 @@
                of rows (labels and plot alike) shows which rows belong
                together; the wider gap between groups stays untinted. -->
           <div
-            v-for="g in multiStation ? bandGroups : []"
+            v-for="(g, i) in bandGroups"
             :key="'group-' + g.band"
             class="band-group-bg"
+            :class="{ alt: i % 2 === 1 }"
             :style="{ top: g.top + 'px', height: g.height + 'px' }"
           />
           <div class="lanes-labels" :style="{ height: gridHeightPx + 'px' }">
@@ -4138,8 +4139,12 @@ export default {
   left: -8px;
   right: -8px;
   z-index: 0;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.025);
   pointer-events: none;
+}
+/* Every other band a shade lighter, so neighbouring bands read apart */
+.band-group-bg.alt {
+  background: rgba(255, 255, 255, 0.065);
 }
 .lanes-labels,
 .lanes-plots {
@@ -4160,16 +4165,15 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(128, 128, 128, 0.35);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.07);
   font-size: 11px;
   letter-spacing: 0.04em;
   opacity: 0.85;
 }
 .band-block.hovered {
   opacity: 1;
-  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.12);
 }
 /* Per-row label (station name), right against the track; also the hover /
    click target for the row */
