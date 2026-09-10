@@ -4261,7 +4261,8 @@ export default {
 }
 .cell-note {
   position: absolute;
-  inset: 0 0 6px 0;
+  /* Sits in the lower half of the cell, just above the stub bars */
+  inset: 30% 0 4px 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4273,7 +4274,9 @@ export default {
 }
 .cell-note.clear {
   color: #43a047;
-  opacity: 0.7;
+  opacity: 0.35;
+  font-size: 9px;
+  letter-spacing: 0.1em;
 }
 .empty-row {
   position: absolute;
