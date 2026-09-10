@@ -2444,7 +2444,6 @@ export default {
     // instant with no re-fetch.
     onPlotMouseDown(e) {
       this._wasDrag = false
-      this._dragBand = this.hoverBand // the row the drag starts on
       const rect = this.$refs.plot.getBoundingClientRect()
       this.dragStartPx = e.clientX - rect.left
       this.dragCurrentPx = this.dragStartPx
@@ -2503,10 +2502,6 @@ export default {
       const newEnd = this.viewStart + (endPx / rect.width) * span
       if (newEnd - newStart < 5) return // guard against zooming to near-nothing
       this.zoomRange = [Math.round(newStart), Math.round(newEnd)]
-      // A drag-zoom opens the band it was drawn on, like a click does.
-      if (this._dragBand && this.visibleBands[this._dragBand]) {
-        this.expandedBand = this._dragBand
-      }
     },
     resetZoom() {
       this.zoomRange = null
