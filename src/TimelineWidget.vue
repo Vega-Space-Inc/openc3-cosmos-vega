@@ -3563,6 +3563,7 @@ export default {
   margin-bottom: 0;
 }
 .lane-label .lane-name {
+  font-size: 11px;
   opacity: 0.75;
   transition: opacity 0.1s ease;
 }
@@ -3700,10 +3701,10 @@ export default {
   position: absolute;
   top: 0;
   transform: translateX(-50%);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  opacity: 0.9;
+  opacity: 0.75;
   white-space: nowrap;
 }
 .x-axis-spacer {
@@ -3875,8 +3876,8 @@ export default {
   position: absolute;
   top: 0;
   transform: translateX(-50%);
-  font-size: 9px;
-  opacity: 0.45;
+  font-size: 11px;
+  opacity: 0.75;
   white-space: nowrap;
 }
 .axis-divider {
