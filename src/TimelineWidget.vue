@@ -149,24 +149,6 @@
     <template v-else>
       <div class="controls-col">
         <div class="controls-row">
-          <div
-            class="ctl-wrap"
-            :class="{ busy }"
-            v-if="organizations.length > 1"
-          >
-            <v-select
-              v-model="selectedOrgId"
-              :items="orgOptions"
-              item-title="label"
-              item-value="id"
-              density="compact"
-              hide-details
-              variant="outlined"
-              style="max-width: 260px"
-              :disabled="loading || workspaceLoading"
-            />
-            <div v-if="busy" class="ctl-shimmer" />
-          </div>
           <div class="ctl-wrap" :class="{ busy }">
             <v-select
               v-model="selectedSatelliteId"
@@ -212,6 +194,41 @@
             </v-select>
             <div v-if="busy" class="ctl-shimmer" />
           </div>
+          <!-- Bands: all on by default; deselect to hide a band's rows -->
+          <div class="ctl-wrap" :class="{ busy }">
+            <v-select
+              v-model="selectedBands"
+              :items="bandOptions"
+              item-title="label"
+              item-value="id"
+              multiple
+              density="compact"
+              hide-details
+              variant="outlined"
+              style="max-width: 300px"
+              :disabled="loading || workspaceLoading"
+            >
+              <template #selection="{ item, index }">
+                <span v-if="allBandsSelected && index === 0" class="sel-text"
+                  >All bands</span
+                >
+                <template v-else-if="!allBandsSelected">
+                  <v-chip
+                    v-if="index < 3"
+                    size="small"
+                    closable
+                    @click:close.stop="toggleBandOff(item.value)"
+                  >
+                    {{ item.title }}
+                  </v-chip>
+                  <span v-else-if="index === 3" class="more-selected"
+                    >+{{ selectedBands.length - 3 }}</span
+                  >
+                </template>
+              </template>
+            </v-select>
+            <div v-if="busy" class="ctl-shimmer" />
+          </div>
           <!-- Refresh + settings sit on the row's right edge -->
           <v-btn
             class="ml-auto"
@@ -228,7 +245,7 @@
           >
             Refresh
           </v-btn>
-          <v-menu>
+          <v-menu :close-on-content-click="false">
             <template #activator="{ props }">
               <v-btn
                 icon
@@ -240,6 +257,25 @@
               </v-btn>
             </template>
             <v-list density="compact">
+              <!-- Organization switch: an internal (Vega) affordance, so it
+                   only appears when COSMOS is running locally -->
+              <template v-if="showOrgPicker">
+                <v-list-item>
+                  <v-select
+                    v-model="selectedOrgId"
+                    :items="orgOptions"
+                    item-title="label"
+                    item-value="id"
+                    label="Organization"
+                    density="compact"
+                    hide-details
+                    variant="outlined"
+                    style="min-width: 240px"
+                    :disabled="loading || workspaceLoading"
+                  />
+                </v-list-item>
+                <v-divider />
+              </template>
               <v-list-item
                 :href="vegaHeatmapUrl"
                 target="_blank"
@@ -1238,7 +1274,10 @@ export default {
       CHART_H,
       LANE_HEADROOM,
       RAMP_COLORS,
-      BUILD_STAMP: typeof __VEGA_WIDGET_BUILD__ === 'string' ? __VEGA_WIDGET_BUILD__ : 'dev',
+      BUILD_STAMP:
+        typeof __VEGA_WIDGET_BUILD__ === 'string'
+          ? __VEGA_WIDGET_BUILD__
+          : 'dev',
       BAR_COLORS,
       // COSMOS 'time_zone' setting - see the Time zone block up top.
       timeZone: 'local',
@@ -1475,6 +1514,40 @@ export default {
     },
     busy() {
       return this.loading || this.workspaceLoading
+    },
+    // The organization switch is for Vega's own use (customers have one
+    // org): shown only when COSMOS itself is running on this machine.
+    showOrgPicker() {
+      if (this.organizations.length < 2) return false
+      const host = (window.location && window.location.hostname) || ''
+      return (
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        host === '::1' ||
+        host.endsWith('.local')
+      )
+    },
+    bandOptions() {
+      return this.bands.map((b) => ({ id: b, label: b }))
+    },
+    // The band picker is a view over visibleBands (all on by default).
+    selectedBands: {
+      get() {
+        return this.bands.filter((b) => this.visibleBands[b])
+      },
+      set(list) {
+        const v = {}
+        for (const b of this.bands) v[b] = list.includes(b)
+        this.visibleBands = v
+        if (this.expandedBand && !v[this.rowBand(this.expandedBand)]) {
+          this.expandedBand = null
+        }
+      },
+    },
+    allBandsSelected() {
+      return (
+        this.bands.length > 0 && this.selectedBands.length === this.bands.length
+      )
     },
     multiStation() {
       return this.selectedStations.length > 1
@@ -2918,6 +2991,9 @@ export default {
       }
       return d
     },
+    toggleBandOff(band) {
+      this.selectedBands = this.selectedBands.filter((b) => b !== band)
+    },
     removeStation(id) {
       this.selectedGroundStationIds = this.selectedGroundStationIds.filter(
         (v) => v !== id,
@@ -3871,6 +3947,10 @@ export default {
 .controls-row :deep(.v-select .v-field__input) {
   flex-wrap: nowrap;
   overflow: hidden;
+}
+.sel-text {
+  font-size: 12px;
+  white-space: nowrap;
 }
 .more-selected {
   font-size: 12px;
