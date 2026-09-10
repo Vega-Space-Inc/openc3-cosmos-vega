@@ -535,53 +535,41 @@
                 </svg>
               </div>
             </div>
-            <!-- One outlined cell per (pass, band), laid out to match the
-                 lane rows exactly, so the chart reads as a grid with the
-                 same clear gap between rows as between passes. -->
+            <!-- One outlined box per (row, contiguous covered span). The
+                 box hugs the minutes that station actually has in the
+                 pass, so with several stations the empty space falls
+                 BETWEEN boxes rather than inside them; a station that
+                 doesn't see a pass has no box there at all. -->
             <div
-              v-for="seg in segments"
-              :key="'box-' + seg.cstart"
-              class="pass-box"
-              :style="{
-                left: cToPct(seg.cstart) + '%',
-                width: (seg.clen / (viewEnd - viewStart)) * 100 + '%',
+              v-for="span in allSpans"
+              :key="span.id"
+              class="pass-cell"
+              :style="spanStyle(span)"
+              :class="{
+                expanded: expandedBand === span.key,
+                placeholder: emptyBands[rowBand(span.key)],
+                active:
+                  !emptyBands[rowBand(span.key)] &&
+                  hoverCell &&
+                  hoverCell.spanId === span.id,
               }"
             >
-              <div
-                v-for="band in rowKeys"
-                :key="'cell-' + band"
-                class="pass-cell"
-                :style="{
-                  height: rowHeightPx(band) + 'px',
-                  marginBottom: rowGap(band) + 'px',
-                }"
-                :class="{
-                  expanded: expandedBand === band,
-                  placeholder: emptyBands[rowBand(band)],
-                  active:
-                    !emptyBands[rowBand(band)] &&
-                    hoverCell &&
-                    hoverCell.band === band &&
-                    hoverCell.cstart === seg.cstart,
-                }"
+              <span
+                v-if="
+                  !emptyBands[rowBand(span.key)] &&
+                  cellStatus[span.id] !== 'data'
+                "
+                class="cell-note"
+                :class="cellStatus[span.id]"
               >
-                <span
-                  v-if="
-                    !emptyBands[rowBand(band)] &&
-                    cellStatus[seg.cstart + '|' + band] !== 'data'
-                  "
-                  class="cell-note"
-                  :class="cellStatus[seg.cstart + '|' + band]"
-                >
-                  {{
-                    cellStatus[seg.cstart + '|' + band] === 'clear'
-                      ? 'Clear'
-                      : cellStatus[seg.cstart + '|' + band] === 'loading'
-                        ? 'Loading…'
-                        : 'No data'
-                  }}
-                </span>
-              </div>
+                {{
+                  cellStatus[span.id] === 'clear'
+                    ? 'Clear'
+                    : cellStatus[span.id] === 'loading'
+                      ? 'Loading…'
+                      : 'No data'
+                }}
+              </span>
             </div>
             <!-- A band with nothing in the whole window gets one cell across
                  all the passes saying so, instead of a row of empty boxes. -->
@@ -1876,33 +1864,76 @@ export default {
     },
     // Per (pass, band) cell: 'data' (something to draw), 'clear' (readings,
     // all zero) or 'nodata' (no reading in the pass).
-    cellStatus() {
+    // Per row, the contiguous covered spans inside each pass segment, in
+    // compressed coordinates: { [rowKey]: [{ id, key, cstart, clen,
+    // startIdx, endIdx }] }. A row whose station hasn't loaded yet gets the
+    // whole segment (so a 'Loading' box shows). With one station selected
+    // every segment is one span - the box is the pass, as before.
+    rowSpans() {
       const result = {}
-      for (const seg of this.segments) {
-        for (const key of this.rowKeys) {
-          const entries = this.rowEntries(key)
-          const band = this.rowBand(key)
+      for (const key of this.rowKeys) {
+        const entries = this.rowEntries(key)
+        const spans = []
+        for (const seg of this.segments) {
           if (!entries) {
-            result[`${seg.cstart}|${key}`] = 'loading'
+            spans.push({
+              id: `${key}|${seg.startIdx}`,
+              key,
+              cstart: seg.cstart,
+              clen: seg.clen,
+              startIdx: seg.startIdx,
+              endIdx: seg.endIdx,
+              loading: true,
+            })
             continue
           }
-          let seen = false
-          let any = false
-          for (let i = seg.startIdx; i < seg.endIdx; i++) {
-            const c = this.countOf(entries[i], band)
-            if (c === null) continue
-            seen = true
-            if (c > 0) {
-              any = true
-              break
+          let runStart = null
+          for (let i = seg.startIdx; i <= seg.endIdx; i++) {
+            const covered =
+              i < seg.endIdx && !!(entries[i] && entries[i].covered)
+            if (covered && runStart === null) runStart = i
+            if (!covered && runStart !== null) {
+              spans.push({
+                id: `${key}|${runStart}`,
+                key,
+                cstart: seg.cstart + (runStart - seg.startIdx),
+                clen: i - runStart,
+                startIdx: runStart,
+                endIdx: i,
+              })
+              runStart = null
             }
           }
-          result[`${seg.cstart}|${key}`] = any
-            ? 'data'
-            : seen
-              ? 'clear'
-              : 'nodata'
         }
+        result[key] = spans
+      }
+      return result
+    },
+    allSpans() {
+      return this.rowKeys.flatMap((key) => this.rowSpans[key] || [])
+    },
+    // 'data' | 'clear' | 'nodata' | 'loading' per span.
+    cellStatus() {
+      const result = {}
+      for (const span of this.allSpans) {
+        if (span.loading) {
+          result[span.id] = 'loading'
+          continue
+        }
+        const entries = this.rowEntries(span.key)
+        const band = this.rowBand(span.key)
+        let seen = false
+        let any = false
+        for (let i = span.startIdx; i < span.endIdx; i++) {
+          const c = this.countOf(entries[i], band)
+          if (c === null) continue
+          seen = true
+          if (c > 0) {
+            any = true
+            break
+          }
+        }
+        result[span.id] = any ? 'data' : seen ? 'clear' : 'nodata'
       }
       return result
     },
@@ -1913,19 +1944,9 @@ export default {
       const band = this.hoverBand
       if (!slot || !band) return null
       if (this.emptyBands[this.rowBand(band)]) return null
-      const row = this.rowGeometry[band]
-      if (!row) return null
-      const span = this.viewEnd - this.viewStart
-      return {
-        band,
-        cstart: slot.seg.cstart,
-        style: {
-          left: `${this.cToPct(slot.seg.cstart)}%`,
-          width: `${(slot.seg.clen / span) * 100}%`,
-          top: row.top,
-          height: row.height,
-        },
-      }
+      const span = this.spanAt(band, slot.start)
+      if (!span) return null
+      return { band, spanId: span.id, style: this.spanStyle(span) }
     },
     // The hovered slice per band, ready to redraw on top of the dimmed lane.
     hoverSlices() {
@@ -2461,6 +2482,13 @@ export default {
         seg =
           this.segments.find((s) => c >= s.cstart && c < s.cstart + s.clen) ||
           null
+        // Prefer the row's own covered span (the box the user clicked) to
+        // the union pass it sits in.
+        if (seg) {
+          const idx = seg.startIdx + Math.floor(c - seg.cstart)
+          const sp = this.spanAt(band, idx)
+          if (sp) seg = { cstart: sp.cstart, clen: sp.clen }
+        }
       }
       if (!seg) {
         this.expandedBand = this.expandedBand === band ? null : band
@@ -2748,6 +2776,24 @@ export default {
     },
     rowBand(key) {
       return String(key).split('|')[0]
+    },
+    // The row's covered span containing minute idx, if any.
+    spanAt(key, idx) {
+      return (
+        (this.rowSpans[key] || []).find(
+          (sp) => idx >= sp.startIdx && idx < sp.endIdx,
+        ) || null
+      )
+    },
+    spanStyle(span) {
+      const row = this.rowGeometry[span.key] || { top: '0px', height: '46px' }
+      const view = this.viewEnd - this.viewStart
+      return {
+        left: `${this.cToPct(span.cstart)}%`,
+        width: `${(span.clen / view) * 100}%`,
+        top: row.top,
+        height: row.height,
+      }
     },
     rowGs(key) {
       return String(key).split('|')[1]
@@ -4030,20 +4076,12 @@ export default {
 /* Grid cells: one outlined box per (pass, band), stacked to mirror the lane
    rows exactly (same heights, same row gap). The lanes draw no lines of
    their own, so nothing crosses the gaps. */
-.pass-box {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-}
 .pass-cell {
-  position: relative;
-  flex: none;
+  position: absolute;
   box-sizing: border-box;
   border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 3px;
+  pointer-events: none;
   transition: height 0.15s ease;
 }
 .pass-cell.active {
