@@ -1478,10 +1478,21 @@ export default {
     axisMarks() {
       const segs = this.segments
       if (!segs.length) return []
-      if (segs.length === 1 && segs[0].clen >= 720) {
-        const seg = segs[0]
-        const span = this.viewEnd - this.viewStart
-        const rough = span / 7
+      const vStart = this.viewStart
+      const vEnd = this.viewEnd
+      const span = Math.max(1, vEnd - vStart)
+      const px = this.laneWidthPx || 1200
+      // Clock ticks whenever the view lies within ONE pass: a GEO's
+      // day-long coverage, a GEO whose coverage only starts partway through
+      // the day (the earlier part is before the forecast run), or any pass
+      // the user has zoomed into. Otherwise each pass gets its edge times.
+      const only = segs.find(
+        (s) => vStart >= s.cstart - 1e-6 && vEnd <= s.cstart + s.clen + 1e-6,
+      )
+      if (only) {
+        const seg = only
+        // About a dozen ticks across the view, never closer than ~70px.
+        const rough = Math.max(span / 12, (span * 70) / px)
         let interval = TICK_INTERVALS[TICK_INTERVALS.length - 1]
         for (const opt of TICK_INTERVALS) {
           if (rough <= opt) {
@@ -1493,8 +1504,6 @@ export default {
         // edges always labelled: the first tick flush left, the last flush
         // right. A tick within a quarter-interval of an edge is dropped so
         // it can't collide with the edge label.
-        const vStart = this.viewStart
-        const vEnd = this.viewEnd
         const toIdx = (c) => seg.startIdx + (c - seg.cstart)
         const labelAt = (idx) => {
           const hm = this.formatHM(this.idxToDate(idx))
@@ -1513,10 +1522,9 @@ export default {
         return marks
       }
       // Each pass is its own little chart: start time on its left edge, end
-      // time on its right, pass number centred beneath. A box too narrow
-      // for two times keeps only its start time.
-      const pxPerUnit =
-        (this.laneWidthPx || 1200) / Math.max(1, this.viewEnd - this.viewStart)
+      // time on its right, pass number centred above. A box too narrow for
+      // two times keeps only its start time.
+      const pxPerUnit = px / span
       return segs.flatMap((s) => {
         const marks = [{ c: s.cstart, label: s.startLabel, align: 'start' }]
         if (s.clen * pxPerUnit >= 72) {
