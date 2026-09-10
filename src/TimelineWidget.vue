@@ -814,7 +814,10 @@
                 'align-' + (mark.align || 'center'),
                 { angled: mark.angled },
               ]"
-              :style="{ left: cToPct(mark.c) + '%' }"
+              :style="{
+                left: cToPct(mark.c) + '%',
+                top: (mark.tier ? 18 : 0) + 'px',
+              }"
             >
               <div v-for="(line, i) in mark.lines" :key="i">{{ line }}</div>
             </span>
@@ -1949,15 +1952,37 @@ export default {
         lastRight = cpx + placed.w / 2
       }
       if (allFit) return upright
+      // Angled: the start time hangs from the box's left edge and the end
+      // time from its right edge, both running down-left at 40 degrees.
+      // End times sit on a second tier (18px lower) so a narrow pass's two
+      // labels - and one pass's end next to the next pass's start - never
+      // share a tier; within a tier anchors need ~22px between them.
       const angled = []
-      let lastAnchor = -Infinity
+      let lastStart = -Infinity
+      let lastEnd = -Infinity
       for (const s of segs) {
-        const cx = s.cstart + s.clen / 2
-        const cpx = (cx - vStart) * pxPerUnit
-        if (cpx < lastAnchor + 22) continue
-        const text = `${s.startLabel} – ${s.endLabel}`
-        angled.push({ c: cx, lines: [text], angled: true, w: width(text) })
-        lastAnchor = cpx
+        const spx = (s.cstart - vStart) * pxPerUnit
+        const epx = spx + s.clen * pxPerUnit
+        if (spx >= lastStart + 22) {
+          angled.push({
+            c: s.cstart,
+            lines: [s.startLabel],
+            angled: true,
+            tier: 0,
+            w: width(s.startLabel),
+          })
+          lastStart = spx
+        }
+        if (epx >= lastEnd + 22) {
+          angled.push({
+            c: s.cstart + s.clen,
+            lines: [s.endLabel],
+            angled: true,
+            tier: 1,
+            w: width(s.endLabel),
+          })
+          lastEnd = epx
+        }
       }
       return angled
     },
@@ -2058,7 +2083,9 @@ export default {
       const marks = this.axisMarks
       if (marks.some((m) => m.angled)) {
         const longest = Math.max(0, ...marks.map((m) => m.w || 0))
-        return Math.ceil(longest * Math.sin((40 * Math.PI) / 180) + 18)
+        const rad = (40 * Math.PI) / 180
+        // drop of the longest label + the line's own height, from tier 1
+        return Math.ceil(longest * Math.sin(rad) + 14 * Math.cos(rad) + 18 + 4)
       }
       return marks.some((m) => m.lines && m.lines.length > 1) ? 30 : 16
     },
@@ -4698,7 +4725,9 @@ export default {
   position: relative;
   flex: 1;
   min-width: 0;
-  overflow: hidden;
+  /* Angled labels run down-left past the first pass, into the label
+     column's empty space; nothing should cut them */
+  overflow: visible;
 }
 
 .window-nav {
