@@ -570,7 +570,8 @@
                 <span
                   v-if="
                     !emptyBands[rowBand(span.key)] &&
-                    cellStatus[span.id] !== 'data'
+                    cellStatus[span.id] !== 'data' &&
+                    spanWidthPx(span) >= 58
                   "
                   class="cell-note"
                   :class="cellStatus[span.id]"
@@ -2824,6 +2825,10 @@ export default {
         ) || null
       )
     },
+    spanWidthPx(span) {
+      const view = Math.max(1, this.viewEnd - this.viewStart)
+      return (span.clen / view) * (this.laneWidthPx || 1200)
+    },
     spanStyle(span) {
       const row = this.rowGeometry[span.key] || { top: '0px', height: '46px' }
       const view = this.viewEnd - this.viewStart
@@ -3699,12 +3704,10 @@ export default {
 /* With a user-set height the lanes area takes whatever the controls and
    legend leave, and the band rows share it (rowHeights) */
 .timeline-widget.sized .lanes-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 0 auto;
 }
 .timeline-widget.sized .lanes-body {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 0 auto;
 }
 .controls-col {
   display: flex;
@@ -4137,6 +4140,7 @@ export default {
 .pass-cell {
   position: absolute;
   box-sizing: border-box;
+  overflow: hidden;
   border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 3px;
   pointer-events: none;
