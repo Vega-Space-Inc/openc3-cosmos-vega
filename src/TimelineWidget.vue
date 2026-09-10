@@ -35,7 +35,7 @@
     ref="root"
     class="timeline-widget"
     :class="{ sized: !!userSize }"
-    :style="[computedStyle, userSizeStyle]"
+    :style="[computedStyle, userSizeStyle, { '--label-w': labelWidthPx + 'px' }]"
     @mousedown="onRootMouseDown"
     @dblclick="onRootDblClick"
   >
@@ -169,15 +169,19 @@
             style="max-width: 280px"
             :disabled="loading || workspaceLoading"
           />
+          <!-- Multi-select: each selected station adds a row to every band -->
           <v-select
-            v-model="selectedGroundStationId"
+            v-model="selectedGroundStationIds"
             :items="groundStationOptions"
             item-title="label"
             item-value="id"
+            multiple
+            chips
+            closable-chips
             density="compact"
             hide-details
             variant="outlined"
-            style="max-width: 220px"
+            style="max-width: 360px"
             :disabled="loading || workspaceLoading"
           />
           <v-btn
@@ -408,10 +412,13 @@
         <div class="lanes-body" @mouseleave="hoverBand = null">
           <div class="lanes-labels">
             <div
-              v-for="band in visibleBandList"
+              v-for="band in rowKeys"
               :key="'label-' + band"
               class="lane-label"
-              :style="{ height: rowHeightPx(band) + 'px' }"
+              :style="{
+                height: rowHeightPx(band) + 'px',
+                marginBottom: rowGap(band) + 'px',
+              }"
               :class="{
                 expanded: expandedBand === band,
                 hovered: hoverBand === band,
@@ -419,7 +426,12 @@
               @mouseenter="hoverBand = band"
               @click="onLaneClick(band)"
             >
-              <span class="lane-name">{{ band }}</span>
+              <span class="lane-name" :class="{ blank: !rowIsFirstOfBand(band) }">{{
+                rowBand(band)
+              }}</span>
+              <span v-if="multiStation" class="lane-sub">{{
+                stationNames[rowGs(band)] || rowGs(band)
+              }}</span>
               <template v-if="expandedBand === band">
                 <div
                   v-for="tick in expandedYTicks"
@@ -449,10 +461,13 @@
             />
             <div class="lanes-stack">
               <div
-                v-for="band in visibleBandList"
+                v-for="band in rowKeys"
                 :key="'lane-' + band"
                 class="lane-plot"
-                :style="{ height: rowHeightPx(band) + 'px' }"
+                :style="{
+                  height: rowHeightPx(band) + 'px',
+                  marginBottom: rowGap(band) + 'px',
+                }"
                 :class="{
                   expanded: expandedBand === band,
                   hovered: hoverBand === band,
@@ -461,7 +476,11 @@
                 @click="onCellClick(band, $event)"
               >
                 <div v-if="expandedBand === band" class="lane-title">
-                  {{ band }} · ASI Risk
+                  {{ rowBand(band) }}
+                  <template v-if="multiStation">
+                    · {{ stationNames[rowGs(band)] }}</template
+                  >
+                  · ASI Risk
                 </div>
                 <svg
                   class="lane-svg"
@@ -529,15 +548,18 @@
               }"
             >
               <div
-                v-for="band in visibleBandList"
+                v-for="band in rowKeys"
                 :key="'cell-' + band"
                 class="pass-cell"
-                :style="{ height: rowHeightPx(band) + 'px' }"
+                :style="{
+                  height: rowHeightPx(band) + 'px',
+                  marginBottom: rowGap(band) + 'px',
+                }"
                 :class="{
                   expanded: expandedBand === band,
-                  placeholder: emptyBands[band],
+                  placeholder: emptyBands[rowBand(band)],
                   active:
-                    !emptyBands[band] &&
+                    !emptyBands[rowBand(band)] &&
                     hoverCell &&
                     hoverCell.band === band &&
                     hoverCell.cstart === seg.cstart,
@@ -545,7 +567,7 @@
               >
                 <span
                   v-if="
-                    !emptyBands[band] &&
+                    !emptyBands[rowBand(band)] &&
                     cellStatus[seg.cstart + '|' + band] !== 'data'
                   "
                   class="cell-note"
@@ -554,7 +576,9 @@
                   {{
                     cellStatus[seg.cstart + '|' + band] === 'clear'
                       ? 'Clear'
-                      : 'No data'
+                      : cellStatus[seg.cstart + '|' + band] === 'loading'
+                        ? 'Loading…'
+                        : 'No data'
                   }}
                 </span>
               </div>
@@ -562,7 +586,7 @@
             <!-- A band with nothing in the whole window gets one cell across
                  all the passes saying so, instead of a row of empty boxes. -->
             <div
-              v-for="band in visibleBandList.filter((b) => emptyBands[b])"
+              v-for="band in rowKeys.filter((k) => emptyBands[rowBand(k)])"
               :key="'empty-' + band"
               class="empty-row"
               :style="rowGeometry[band]"
@@ -611,7 +635,7 @@
                 :class="{ 'hover-tooltip-row-active': row.band === hoverBand }"
               >
                 <span class="tone-swatch" :style="{ background: row.color }" />
-                <span class="hover-tooltip-band">{{ row.band }}</span>
+                <span class="hover-tooltip-band">{{ row.label }}</span>
                 <span class="hover-tooltip-count">{{ row.count }}</span>
                 <span class="hover-tooltip-tone">{{ row.toneLabel }}</span>
               </div>
@@ -1022,6 +1046,9 @@ function readStoredSize() {
 }
 // Width of the bottom-right corner that counts as the resize grip.
 const GRIP_PX = 20
+// With several ground stations selected every band gets one row per
+// station; rows of one band sit LANE_GAP_PX apart and bands GROUP_GAP_PX.
+const GROUP_GAP_PX = 14
 function readStoredApiKey() {
   try {
     return localStorage.getItem(API_KEY_LS_KEY) || null
@@ -1163,9 +1190,9 @@ export default {
       // { [satelliteId]: true/false }.
       forecastAvailableBySatId: null,
       selectedSatelliteId: null,
-      selectedGroundStationId: null,
-      // dayDataByDate[date] = { minutes: [...], toneWarningMin, toneHighMin }
-      dayDataByDate: {},
+      selectedGroundStationIds: [],
+      // stationDayData[gsId][date] = { minutes: [...], toneWarningMin, toneHighMin }
+      stationDayData: {},
       // First day of the sliding window, relative to today (see the
       // WINDOW_DAYS constants above).
       windowOffsetDays: DEFAULT_WINDOW_OFFSET,
@@ -1322,12 +1349,51 @@ export default {
         this.satellites.find((s) => s.id === this.selectedSatelliteId) || null
       )
     },
+    // The first selected station - what the single-station paths (measured
+    // history, the Refresh guard) act on.
+    selectedGroundStationId() {
+      return this.selectedGroundStationIds.length
+        ? this.selectedGroundStationIds[0]
+        : null
+    },
     selectedGroundStation() {
       return (
         this.groundStations.find(
           (gs) => gs.id === this.selectedGroundStationId,
         ) || null
       )
+    },
+    // Selected stations in the order they were picked.
+    selectedStations() {
+      return this.selectedGroundStationIds
+        .map((id) => this.groundStations.find((gs) => gs.id === id))
+        .filter(Boolean)
+    },
+    multiStation() {
+      return this.selectedStations.length > 1
+    },
+    stationNames() {
+      const result = {}
+      for (const gs of this.groundStations) result[String(gs.id)] = gs.name
+      return result
+    },
+    // Grid rows: for every visible band, one row per selected station,
+    // keyed '<band>|<gsId>' (see rowBand / rowGs).
+    rowKeys() {
+      const keys = []
+      for (const band of this.visibleBandList) {
+        for (const gs of this.selectedStations) keys.push(`${band}|${gs.id}`)
+      }
+      return keys
+    },
+    // Each selected station's minutes on the window's grid.
+    stationEntries() {
+      const result = {}
+      for (const gs of this.selectedStations) {
+        const data = this.stationDayData[gs.id]
+        result[String(gs.id)] = data ? this.entriesFrom(data) : null
+      }
+      return result
     },
     bands() {
       return (this.selectedSatellite && this.selectedSatellite.bands) || []
@@ -1437,16 +1503,29 @@ export default {
       return this.days[0].startMs
     },
     // Lookup: absolute minute index -> that minute's data entry (or null).
+    // The window's minutes as the UNION of coverage across the selected
+    // stations (covered when any of them sees the satellite). This is what
+    // the shared pass axis compresses on, so with a LEO the passes of every
+    // selected station line up in one set of boxes; a station that doesn't
+    // see a pass is simply empty there. Counts live per station in
+    // stationEntries. With one station this is that station's own minutes.
     minuteEntries() {
+      const stations = Object.values(this.stationEntries).filter(Boolean)
+      if (stations.length === 1) return stations[0]
       const map = new Array(this.totalMinutes).fill(null)
       const start = this.day0StartMs
-      for (const dayData of Object.values(this.dayDataByDate)) {
-        for (const entry of dayData.minutes || []) {
-          const idx = Math.round(
-            (new Date(entry.timestamp).getTime() - start) / 60000,
-          )
-          if (idx >= 0 && idx < map.length) map[idx] = entry
-        }
+      for (const entries of stations) {
+        entries.forEach((entry, idx) => {
+          if (!entry) return
+          if (!map[idx]) {
+            map[idx] = {
+              timestamp: new Date(start + idx * 60000).toISOString(),
+              covered: false,
+              counts: {},
+            }
+          }
+          if (entry.covered) map[idx].covered = true
+        })
       }
       return map
     },
@@ -1606,10 +1685,15 @@ export default {
     bandMaxes() {
       const result = {}
       for (const band of this.bands) {
+        // One scale per band across the selected stations, so their rows
+        // compare honestly.
         let max = 0
-        for (const entry of this.minuteEntries) {
-          const c = this.countOf(entry, band)
-          if (c !== null && c > max) max = c
+        for (const entries of Object.values(this.stationEntries)) {
+          if (!entries) continue
+          for (const entry of entries) {
+            const c = this.countOf(entry, band)
+            if (c !== null && c > max) max = c
+          }
         }
         result[band] = this.niceMax(max)
       }
@@ -1618,7 +1702,7 @@ export default {
     // Y-tick values for the click-expanded lane, on that band's own scale.
     expandedYTicks() {
       if (!this.expandedBand) return []
-      const max = this.bandMaxes[this.expandedBand] || 1
+      const max = this.bandMaxes[this.rowBand(this.expandedBand)] || 1
       const steps = 4
       const ticks = []
       for (let i = 0; i <= steps; i++) {
@@ -1643,13 +1727,17 @@ export default {
     // horizontal scaling, so drag-zoom stays cheap.
     bandBars() {
       const result = {}
-      for (const band of this.bands) {
-        result[band] = this.buildBandBars(band)
+      for (const key of this.rowKeys) {
+        result[key] = this.buildBandBars(key)
       }
       return result
     },
     rampCss() {
       return `linear-gradient(90deg, ${RAMP_COLORS.join(', ')})`
+    },
+    // Room for band + station names when several stations are selected.
+    labelWidthPx() {
+      return this.multiStation ? 132 : 48
     },
     userSizeStyle() {
       if (!this.userSize) return {}
@@ -1661,7 +1749,7 @@ export default {
     // rest. Never below the automatic sizes, so a short window scrolls
     // rather than squashing the bars.
     rowHeights() {
-      const bands = this.visibleBandList
+      const bands = this.rowKeys
       const n = bands.length
       const base = 46
       const baseExpanded = 220
@@ -1672,7 +1760,7 @@ export default {
         }
         return result
       }
-      const gaps = (n - 1) * LANE_GAP_PX
+      const gaps = bands.reduce((sum, k) => sum + this.rowGap(k), 0)
       if (this.expandedBand && bands.includes(this.expandedBand)) {
         const rest = this.laneAreaPx - gaps - (n - 1) * base
         for (const b of bands) {
@@ -1704,8 +1792,8 @@ export default {
       const range = this.dragRangeC
       if (!range) return null
       const result = {}
-      for (const band of this.bands) {
-        result[band] = this.buildBandBars(band, range)
+      for (const key of this.rowKeys) {
+        result[key] = this.buildBandBars(key, range)
       }
       return result
     },
@@ -1728,10 +1816,10 @@ export default {
     rowGeometry() {
       const result = {}
       let top = 0
-      for (const b of this.visibleBandList) {
+      for (const b of this.rowKeys) {
         const h = this.rowHeights[b]
         result[b] = { top: `${top}px`, height: `${h}px` }
-        top += h + LANE_GAP_PX
+        top += h + this.rowGap(b)
       }
       return result
     },
@@ -1742,10 +1830,13 @@ export default {
     // an all-zero band is treated as 'no reading' (the old behaviour).
     // Remove once that API change is deployed everywhere.
     countsCarryNulls() {
-      for (const entry of this.minuteEntries) {
-        if (!entry || !entry.covered || !entry.counts) continue
-        for (const v of Object.values(entry.counts)) {
-          if (v === null) return true
+      for (const entries of Object.values(this.stationEntries)) {
+        if (!entries) continue
+        for (const entry of entries) {
+          if (!entry || !entry.covered || !entry.counts) continue
+          for (const v of Object.values(entry.counts)) {
+            if (v === null) return true
+          }
         }
       }
       return false
@@ -1759,13 +1850,17 @@ export default {
       const legacy = !this.countsCarryNulls
       for (const band of this.bands) {
         let any = false
-        for (const entry of this.minuteEntries) {
-          const c = this.countOf(entry, band)
-          if (c === null) continue
-          if (!legacy || c > 0) {
-            any = true
-            break
+        for (const entries of Object.values(this.stationEntries)) {
+          if (!entries) continue
+          for (const entry of entries) {
+            const c = this.countOf(entry, band)
+            if (c === null) continue
+            if (!legacy || c > 0) {
+              any = true
+              break
+            }
           }
+          if (any) break
         }
         result[band] = !any
       }
@@ -1776,11 +1871,17 @@ export default {
     cellStatus() {
       const result = {}
       for (const seg of this.segments) {
-        for (const band of this.bands) {
+        for (const key of this.rowKeys) {
+          const entries = this.rowEntries(key)
+          const band = this.rowBand(key)
+          if (!entries) {
+            result[`${seg.cstart}|${key}`] = 'loading'
+            continue
+          }
           let seen = false
           let any = false
           for (let i = seg.startIdx; i < seg.endIdx; i++) {
-            const c = this.countOf(this.minuteEntries[i], band)
+            const c = this.countOf(entries[i], band)
             if (c === null) continue
             seen = true
             if (c > 0) {
@@ -1788,7 +1889,11 @@ export default {
               break
             }
           }
-          result[`${seg.cstart}|${band}`] = any ? 'data' : seen ? 'clear' : 'nodata'
+          result[`${seg.cstart}|${key}`] = any
+            ? 'data'
+            : seen
+              ? 'clear'
+              : 'nodata'
         }
       }
       return result
@@ -1798,8 +1903,8 @@ export default {
     hoverCell() {
       const slot = this.hoverSlot
       const band = this.hoverBand
-      if (!slot || !band || !this.visibleBands[band]) return null
-      if (this.emptyBands[band]) return null
+      if (!slot || !band) return null
+      if (this.emptyBands[this.rowBand(band)]) return null
       const row = this.rowGeometry[band]
       if (!row) return null
       const span = this.viewEnd - this.viewStart
@@ -1819,9 +1924,9 @@ export default {
       const slot = this.hoverSlot
       if (!slot) return null
       const result = {}
-      for (const band of this.bands) {
-        const g = this.sliceGeom(band, slot.seg, slot.start, slot.stop)
-        if (g) result[band] = { d: g.d, color: rampColor(g.level) }
+      for (const key of this.rowKeys) {
+        const g = this.sliceGeom(key, slot.seg, slot.start, slot.stop)
+        if (g) result[key] = { d: g.d, color: rampColor(g.level) }
       }
       return result
     },
@@ -1851,7 +1956,7 @@ export default {
       return { left: `${left}px`, width: `${width}px` }
     },
     hasLoadedData() {
-      return Object.keys(this.dayDataByDate).length > 0
+      return Object.values(this.stationEntries).some(Boolean)
     },
     // Flip the tooltip to the left of the cursor once it's past the
     // midpoint of the current view, so it doesn't run off the right edge.
@@ -1872,31 +1977,44 @@ export default {
       // With per-band lanes, the tooltip shows only the hovered lane's band
       // (falling back to all visible bands when no lane is under the cursor).
       // Counts are the slot's worst minute - the same number the bar shows.
-      const rows = this.bands
-        .filter((b) => this.visibleBands[b])
-        .filter((b) => !this.hoverBand || b === this.hoverBand)
-        .map((b) => {
-          const count = this.slotCount(b, slot.start, slot.stop)
-          const level = this.levelOf(count || 0, b)
-          return {
-            band: b,
-            count: count === null ? '—' : count,
-            color: count > 0 ? rampColor(level) : 'transparent',
-            toneLabel:
-              count === null
-                ? 'No data'
-                : count > 0
-                  ? `${Math.round(level * 100)}% of ${b} peak`
-                  : 'Clear',
-          }
-        })
+      // Rows to show: the hovered row's band at every selected station (so
+      // stations compare) - or, with no row under the cursor, every visible
+      // band at the first station. Counts are the slot's worst minute - the
+      // number the bar shows.
+      const hoveredBand = this.hoverBand ? this.rowBand(this.hoverBand) : null
+      const keys = hoveredBand
+        ? this.rowKeys.filter((k) => this.rowBand(k) === hoveredBand)
+        : this.rowKeys.filter((k) => this.rowGs(k) === this.rowGs(this.rowKeys[0]))
+      const rows = keys.map((k) => {
+        const b = this.rowBand(k)
+        const count = this.slotCount(k, slot.start, slot.stop)
+        const level = this.levelOf(count || 0, b)
+        const label = this.multiStation
+          ? hoveredBand
+            ? this.stationNames[this.rowGs(k)] || this.rowGs(k)
+            : b
+          : b
+        return {
+          band: k,
+          label,
+          count: count === null ? '—' : count,
+          color: count > 0 ? rampColor(level) : 'transparent',
+          toneLabel:
+            count === null
+              ? 'No data'
+              : count > 0
+                ? `${Math.round(level * 100)}% of ${b} peak`
+                : 'Clear',
+        }
+      })
+      const bandSuffix = this.multiStation && hoveredBand ? ` · ${hoveredBand}` : ''
       const from = this.formatHM(this.idxToDate(slot.start))
       const to =
         slot.stop - slot.start > 1
           ? `–${this.formatHM(this.idxToDate(slot.stop - 1))}`
           : ''
       return {
-        label: `${day.weekday} ${day.display} ${from}${to}`,
+        label: `${day.weekday} ${day.display} ${from}${to}${bandSuffix}`,
         covered: entry.covered,
         rows,
       }
@@ -1995,9 +2113,14 @@ export default {
       if (!id || id === old) return
       if (this.selectedGroundStationId) this.loadForecast()
     },
-    selectedGroundStationId(id, old) {
-      if (!id || id === old) return
-      if (this.selectedSatelliteId) this.loadForecast()
+    selectedGroundStationIds: {
+      handler(ids, old) {
+        if (!ids || !ids.length) return
+        if (old && ids.length === old.length && ids.every((v, i) => v === old[i]))
+          return
+        if (this.selectedSatelliteId) this.loadForecast()
+      },
+      deep: true,
     },
     async tlmTarget(target) {
       if (this._restoringTlm) return
@@ -2610,6 +2733,44 @@ export default {
       }
       return d
     },
+    rowBand(key) {
+      return String(key).split('|')[0]
+    },
+    rowGs(key) {
+      return String(key).split('|')[1]
+    },
+    rowEntries(key) {
+      return this.stationEntries[this.rowGs(key)] || null
+    },
+    // Gap below a row: none after the last, GROUP_GAP_PX between bands,
+    // LANE_GAP_PX between a band's station rows.
+    rowGap(key) {
+      const keys = this.rowKeys
+      const i = keys.indexOf(key)
+      if (i < 0 || i === keys.length - 1) return 0
+      return this.rowBand(keys[i + 1]) === this.rowBand(key)
+        ? LANE_GAP_PX
+        : GROUP_GAP_PX
+    },
+    rowIsFirstOfBand(key) {
+      const keys = this.rowKeys
+      const i = keys.indexOf(key)
+      return i <= 0 || this.rowBand(keys[i - 1]) !== this.rowBand(key)
+    },
+    // Places a {date => dayData} map's minutes on the window's minute grid.
+    entriesFrom(dayDataByDate) {
+      const map = new Array(this.totalMinutes).fill(null)
+      const start = this.day0StartMs
+      for (const dayData of Object.values(dayDataByDate || {})) {
+        for (const entry of dayData.minutes || []) {
+          const idx = Math.round(
+            (new Date(entry.timestamp).getTime() - start) / 60000,
+          )
+          if (idx >= 0 && idx < map.length) map[idx] = entry
+        }
+      }
+      return map
+    },
     // A minute's count for a band, or null when there is no reading: the
     // minute isn't covered, or the API sent null because the run never
     // aggregated that band (no candidate interferer, or the band was added
@@ -2624,8 +2785,10 @@ export default {
     // Worst per-band count across the minutes [start, stop) - what a slot
     // shows, so grouping never hides a spike. null when no minute in the
     // slot has a reading.
-    slotCount(band, start, stop) {
-      const entries = this.minuteEntries
+    slotCount(key, start, stop) {
+      const entries = this.rowEntries(key)
+      const band = this.rowBand(key)
+      if (!entries) return null
       let count = null
       for (let j = start; j < stop; j++) {
         const c = this.countOf(entries[j], band)
@@ -2641,10 +2804,10 @@ export default {
     // other; a short final slot (pass length not a multiple of slot) gets a
     // proportionally narrower slice, never one that spills past the pass
     // boundary into the next box.
-    sliceGeom(band, seg, start, stop) {
-      const count = this.slotCount(band, start, stop)
+    sliceGeom(key, seg, start, stop) {
+      const count = this.slotCount(key, start, stop)
       if (!(count > 0)) return null
-      const level = this.levelOf(count, band)
+      const level = this.levelOf(count, this.rowBand(key))
       const step = Math.round(level * (RAMP_STEPS - 1))
       const h = level * CHART_H
       const span = stop - start
@@ -2735,8 +2898,8 @@ export default {
       this.groundStations = []
       this.forecastAvailableBySatId = null
       this.selectedSatelliteId = null
-      this.selectedGroundStationId = null
-      this.dayDataByDate = {}
+      this.selectedGroundStationIds = []
+      this.stationDayData = {}
       this.zoomRange = null
       this.workspaceLoading = true
       this.errorText = ''
@@ -2778,7 +2941,7 @@ export default {
           this.selectedSatelliteId = this.satellites[0].id
         }
         if (this.groundStations.length > 0) {
-          this.selectedGroundStationId = this.groundStations[0].id
+          this.selectedGroundStationIds = [this.groundStations[0].id]
         }
 
         const orgLabel = this.selectedOrg
@@ -2890,60 +3053,61 @@ export default {
       return `${satId}|${gsId}|${day.date}|${day.past ? 'h' : 'f'}`
     },
     // force=true (the Refresh button) bypasses the cache for the visible
-    // window. Otherwise sliding the window only fetches days not already in
-    // the per-(satellite, station, day) cache: measured history is immutable
-    // so it caches for the session; today/forecast days expire after
-    // FORECAST_CACHE_TTL_MS since the forecast (and today's elapsed portion)
-    // keeps changing.
+    // window. Otherwise only days not already in the per-(satellite,
+    // station, day) cache are fetched: today/forecast days expire after
+    // FORECAST_CACHE_TTL_MS since the forecast keeps changing. One station
+    // at a time (the interface is a serial pipe); rows fill in as each
+    // station lands.
     async loadForecast(force = false) {
-      if (!this.selectedSatelliteId || !this.selectedGroundStationId) return
+      if (!this.selectedSatelliteId || !this.selectedStations.length) return
       // Generation counter: selection changes can start a new load while an
       // old one is mid-flight; the stale load must stop writing so the chart
-      // never mixes two satellites' data.
+      // never mixes two selections' data.
       const gen = ++this._forecastGen
       this.errorText = ''
       this.zoomRange = null
+      this.expandedBand = null
       const satId = this.selectedSatelliteId
-      const gsId = this.selectedGroundStationId
-      const cached = {}
-      const missingForecast = []
+      const stations = this.selectedStations
       const nowMs = Date.now()
-      // Measured history is one request for exactly the slice of past UTC
-      // days that falls inside the display window - never a whole day the
-      // window only touches the end of - and, being immutable, is kept
-      // across page loads (see historyCacheGet/Put).
-      // day_detail is asked for EVERY UTC day the window touches - it is
-      // fast (cached at Vega) and the latest forecast run often reaches
-      // back into the previous UTC day, which covers the elapsed part of a
-      // local 'today'. Measured history, which is slow, is only merged from
-      // cache here; otherwise it waits for the user to ask (loadHistoryNow).
-      const pastDays = this.utcFetchDays.filter((d) => d.past)
-      const range = this.historyRange(pastDays)
+      // Measured history (slow at Vega) is only offered for a single
+      // station, and only merged from cache here; otherwise it waits for
+      // the user (loadHistoryNow).
       this.pendingHistory = null
-      if (range) {
-        const hit = force === true ? null : this.historyCacheGet(range.key)
-        if (hit) Object.assign(cached, hit)
-        else this.pendingHistory = { pastDays, range, gen }
-      }
-      for (const day of this.utcFetchDays) {
-        const hit = this._dayCache[this.dayCacheKey(satId, gsId, day)]
-        const fresh = hit && nowMs - hit.at < FORECAST_CACHE_TTL_MS
-        if (force !== true && fresh) {
-          cached[day.date] = hit.data
-        } else {
-          missingForecast.push(day)
+      let historyHit = null
+      if (stations.length === 1) {
+        const pastDays = this.utcFetchDays.filter((d) => d.past)
+        const range = this.historyRange(pastDays)
+        if (range) {
+          historyHit = force === true ? null : this.historyCacheGet(range.key)
+          if (!historyHit) this.pendingHistory = { pastDays, range, gen }
         }
       }
       // Cached days render immediately; only the rest are fetched.
-      this.dayDataByDate = cached
-      const total = missingForecast.length
+      const next = {}
+      const missing = []
+      for (const gs of stations) {
+        const byDate = {}
+        if (historyHit) Object.assign(byDate, historyHit)
+        for (const day of this.utcFetchDays) {
+          const hit = this._dayCache[this.dayCacheKey(satId, gs.id, day)]
+          const fresh = hit && nowMs - hit.at < FORECAST_CACHE_TTL_MS
+          if (force !== true && fresh) byDate[day.date] = hit.data
+          else missing.push({ gs, day })
+        }
+        next[gs.id] = byDate
+      }
+      this.stationDayData = next
+      const total = missing.length
       if (total === 0) return
       this.loading = true
       let done = 0
       const failures = []
       try {
-        for (const day of missingForecast) {
-          this.progressText = `Loading ${day.date} (${done}/${total})`
+        for (const { gs, day } of missing) {
+          this.progressText = stations.length > 1
+            ? `Loading ${gs.name} ${day.date} (${done}/${total})`
+            : `Loading ${day.date} (${done}/${total})`
           // Small pacing gap between requests - spreads the batch out to
           // reduce the odds of tripping whatever's causing the occasional
           // Net::ReadTimeout blips (likely rate limiting on rapid bursts).
@@ -2953,18 +3117,21 @@ export default {
           try {
             const dayData = await this.fetchDayDetailWithRetry(
               satId,
-              gsId,
+              gs.id,
               day.date,
             )
             if (gen !== this._forecastGen) return
-            this._dayCache[this.dayCacheKey(satId, gsId, day)] = {
+            this._dayCache[this.dayCacheKey(satId, gs.id, day)] = {
               at: Date.now(),
               data: dayData,
             }
-            this.dayDataByDate = { ...this.dayDataByDate, [day.date]: dayData }
+            this.stationDayData = {
+              ...this.stationDayData,
+              [gs.id]: { ...(this.stationDayData[gs.id] || {}), [day.date]: dayData },
+            }
           } catch (e) {
             if (gen !== this._forecastGen) return
-            failures.push(`${day.date}: ${e.message}`)
+            failures.push(`${gs.name} ${day.date}: ${e.message}`)
           }
           done++
         }
@@ -3163,7 +3330,13 @@ export default {
           }
           // Measured history is immutable - keep the whole slice.
           this.historyCachePut(range.key, merged)
-          this.dayDataByDate = { ...this.dayDataByDate, ...merged }
+          this.stationDayData = {
+            ...this.stationDayData,
+            [groundStationId]: {
+              ...(this.stationDayData[groundStationId] || {}),
+              ...merged,
+            },
+          }
           return
         } catch (e) {
           lastError = e
@@ -3775,7 +3948,7 @@ export default {
   display: flex;
 }
 .lanes-labels {
-  width: 48px;
+  width: var(--label-w, 48px);
   flex: none;
   display: flex;
   flex-direction: column;
@@ -3788,12 +3961,23 @@ export default {
   align-items: center;
   justify-content: flex-start;
   padding-right: 6px;
-  margin-bottom: 5px; /* LANE_GAP_PX - keeps labels level with the rows */
   cursor: pointer;
   transition: height 0.15s ease;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
 }
-.lane-label:last-child {
-  margin-bottom: 0;
+.lane-name.blank {
+  visibility: hidden;
+}
+.lane-sub {
+  font-size: 10px;
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .lane-label .lane-name {
   font-size: 11px;
@@ -3827,11 +4011,7 @@ export default {
 }
 .lane-plot {
   position: relative;
-  margin-bottom: 5px; /* LANE_GAP_PX */
   transition: height 0.15s ease;
-}
-.lane-plot:last-child {
-  margin-bottom: 0;
 }
 /* Grid cells: one outlined box per (pass, band), stacked to mirror the lane
    rows exactly (same heights, same row gap). The lanes draw no lines of
@@ -3848,7 +4028,6 @@ export default {
   position: relative;
   flex: none;
   box-sizing: border-box;
-  margin-bottom: 5px; /* LANE_GAP_PX */
   border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 3px;
   transition: height 0.15s ease;
@@ -3898,9 +4077,6 @@ export default {
   background: rgba(255, 255, 255, 0.08);
   pointer-events: none;
 }
-.pass-cell:last-child {
-  margin-bottom: 0;
-}
 .hover-tooltip-row-active {
   font-weight: 700;
 }
@@ -3948,7 +4124,7 @@ export default {
   white-space: nowrap;
 }
 .x-axis-spacer {
-  width: 48px; /* .lanes-labels */
+  width: var(--label-w, 48px); /* .lanes-labels */
   flex: none;
 }
 .x-axis-row .x-axis {
