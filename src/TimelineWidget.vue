@@ -1747,7 +1747,8 @@ export default {
     rowHeights() {
       const bands = this.rowKeys
       const n = bands.length
-      const base = 46
+      // Several stations multiply the rows, so each one gets shorter.
+      const base = this.multiStation ? 32 : 46
       const baseExpanded = 220
       const result = {}
       if (!this.userSize || !n || !this.laneAreaPx) {
@@ -2247,7 +2248,7 @@ export default {
   },
   methods: {
     rowHeightPx(band) {
-      return this.rowHeights[band] || 46
+      return this.rowHeights[band] || (this.multiStation ? 32 : 46)
     },
     inGrip(e) {
       const el = this.$refs.root
