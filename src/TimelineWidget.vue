@@ -1689,10 +1689,20 @@ export default {
     passMarks() {
       const segs = this.segments
       if (segs.length < 2) return []
-      return segs.map((s) => ({
-        c: s.cstart + s.clen / 2,
-        label: `Pass ${s.index}`,
-      }))
+      // Centred on the VISIBLE part of each pass, so a zoomed view keeps
+      // its labels inside the chart; a sliver too narrow to carry a label
+      // (under ~48px) gets none.
+      const vStart = this.viewStart
+      const vEnd = this.viewEnd
+      const pxPerUnit = (this.laneWidthPx || 1200) / Math.max(1, vEnd - vStart)
+      const marks = []
+      for (const s of segs) {
+        const a = Math.max(s.cstart, vStart)
+        const b = Math.min(s.cstart + s.clen, vEnd)
+        if (b <= a || (b - a) * pxPerUnit < 48) continue
+        marks.push({ c: (a + b) / 2, label: `Pass ${s.index}` })
+      }
+      return marks
     },
     dragSelectionStyle() {
       if (this.dragStartPx === null) return null
@@ -3706,6 +3716,7 @@ export default {
   position: relative;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 .pass-label {
   position: absolute;
