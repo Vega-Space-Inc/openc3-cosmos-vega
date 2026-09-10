@@ -190,7 +190,7 @@
           <v-btn
             color="primary"
             variant="flat"
-            style="height: 40px"
+            style="height: 32px"
             :loading="loading"
             :disabled="
               workspaceLoading ||
@@ -206,7 +206,7 @@
               <v-btn
                 icon
                 variant="text"
-                style="height: 40px; width: 40px"
+                style="height: 32px; width: 32px"
                 v-bind="props"
               >
                 <v-icon>mdi-cog</v-icon>
@@ -340,7 +340,7 @@
           <v-btn
             v-if="historyNeeded"
             variant="outlined"
-            style="height: 40px"
+            style="height: 32px"
             :loading="historyLoading"
             :disabled="loading"
             title="The earlier part of this day is before the current forecast run. Vega's measured-history build takes 30-45 seconds."
@@ -364,7 +364,7 @@
           <v-btn
             v-if="zoomRange"
             variant="outlined"
-            style="height: 40px"
+            style="height: 32px"
             @click="resetZoom"
           >
             Reset zoom ({{ zoomSpanLabel }})
@@ -3695,6 +3695,31 @@ export default {
   align-items: center;
   gap: 8px;
 }
+/* Compact controls: 32px fields with 12px type, to leave the height to
+   the chart. Vuetify sizes a compact field from --v-input-control-height. */
+.controls-row :deep(.v-input) {
+  --v-input-control-height: 32px;
+}
+.controls-row :deep(.v-field) {
+  --v-field-input-padding-top: 4px;
+  --v-field-input-padding-bottom: 4px;
+  font-size: 12px;
+}
+.controls-row :deep(.v-field__input),
+.controls-row :deep(.v-select__selection-text) {
+  font-size: 12px;
+  min-height: 32px;
+}
+.controls-row :deep(.v-chip) {
+  height: 20px;
+  font-size: 11px;
+}
+.controls-row :deep(.v-btn) {
+  font-size: 12px;
+}
+.controls-row :deep(.v-field__append-inner) {
+  padding-top: 4px;
+}
 .select-label {
   font-size: 11px;
   letter-spacing: 0.15em;
@@ -4242,7 +4267,7 @@ export default {
 .quick-days {
   /* Drawn with the same Astro variables COSMOS applies to v-select
      fieldsets, so it reads as one of the fields above */
-  height: 40px;
+  height: 32px;
   border: 1px solid var(--color-border-interactive-muted);
   border-radius: 4px;
   background-color: var(--color-background-base-default);
@@ -4254,9 +4279,9 @@ export default {
   border-radius: 0;
   text-transform: none;
   letter-spacing: normal;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 400;
-  padding: 0 16px;
+  padding: 0 12px;
   color: var(--color-text-interactive-default) !important;
 }
 .quick-days .v-btn + .v-btn {
@@ -4282,15 +4307,15 @@ export default {
 .cal-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 12px;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
   border: 1px solid var(--color-border-interactive-muted);
   border-radius: 4px;
   background-color: var(--color-background-base-default);
   color: var(--color-text-interactive-default);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
 }
 .cal-btn:disabled {
   opacity: 0.5;
