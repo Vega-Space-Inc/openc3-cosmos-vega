@@ -319,6 +319,17 @@
           </v-list>
         </v-menu>
         <div class="window-nav-right">
+          <v-btn
+            v-if="historyNeeded"
+            variant="outlined"
+            style="height: 40px"
+            :loading="historyLoading"
+            :disabled="loading"
+            title="The earlier part of this day is before the current forecast run. Vega's measured-history build takes 30-45 seconds."
+            @click="loadHistoryNow"
+          >
+            Load measured history
+          </v-btn>
           <!-- Loading / error text lives here: the box can shrink (min-width
                0, ellipsis) so a long message never widens the widget or
                adds a line -->
@@ -1050,6 +1061,10 @@ export default {
       // Rows for bands with nothing in the loaded window are hidden until
       // the user asks for them.
       showEmptyBands: false,
+      // Measured history the current window could still fetch on request
+      // ({pastDays, range}), and whether that fetch is running.
+      pendingHistory: null,
+      historyLoading: false,
       // CSS px width of the lanes area, kept current by a ResizeObserver;
       // drives how many minutes each slice covers (see slotMinutes).
       laneWidthPx: 0,
@@ -1265,6 +1280,21 @@ export default {
       const withData = visible.filter((b) => !empty[b])
       if (!this.showEmptyBands) return withData
       return [...withData, ...visible.filter((b) => empty[b])]
+    },
+    // True while part of the window precedes what the forecast run covers
+    // and no measured history has been loaded for it - i.e. the 'Load
+    // measured history' button would add something.
+    historyNeeded() {
+      const pending = this.pendingHistory
+      if (!pending || !this.hasLoadedData) return false
+      const start = this.day0StartMs
+      const from = Math.max(0, Math.round((new Date(pending.range.startIso) - start) / 60000))
+      const to = Math.min(this.totalMinutes, Math.round((new Date(pending.range.endIso) - start) / 60000))
+      const entries = this.minuteEntries
+      for (let i = from; i < to; i++) {
+        if (entries[i] && entries[i].covered) return false
+      }
+      return to > from
     },
     emptyBandCount() {
       return this.bands.filter(
@@ -2667,21 +2697,26 @@ export default {
       const satId = this.selectedSatelliteId
       const gsId = this.selectedGroundStationId
       const cached = {}
-      let missingPast = []
       const missingForecast = []
       const nowMs = Date.now()
       // Measured history is one request for exactly the slice of past UTC
       // days that falls inside the display window - never a whole day the
       // window only touches the end of - and, being immutable, is kept
       // across page loads (see historyCacheGet/Put).
+      // day_detail is asked for EVERY UTC day the window touches - it is
+      // fast (cached at Vega) and the latest forecast run often reaches
+      // back into the previous UTC day, which covers the elapsed part of a
+      // local 'today'. Measured history, which is slow, is only merged from
+      // cache here; otherwise it waits for the user to ask (loadHistoryNow).
       const pastDays = this.utcFetchDays.filter((d) => d.past)
       const range = this.historyRange(pastDays)
+      this.pendingHistory = null
       if (range) {
         const hit = force === true ? null : this.historyCacheGet(range.key)
         if (hit) Object.assign(cached, hit)
-        else missingPast = pastDays
+        else this.pendingHistory = { pastDays, range, gen }
       }
-      for (const day of this.utcFetchDays.filter((d) => !d.past)) {
+      for (const day of this.utcFetchDays) {
         const hit = this._dayCache[this.dayCacheKey(satId, gsId, day)]
         const fresh = hit && nowMs - hit.at < FORECAST_CACHE_TTL_MS
         if (force !== true && fresh) {
@@ -2692,7 +2727,7 @@ export default {
       }
       // Cached days render immediately; only the rest are fetched.
       this.dayDataByDate = cached
-      const total = missingForecast.length + (missingPast.length ? 1 : 0)
+      const total = missingForecast.length
       if (total === 0) return
       this.loading = true
       let done = 0
@@ -2722,20 +2757,6 @@ export default {
             if (gen !== this._forecastGen) return
             failures.push(`${day.date}: ${e.message}`)
           }
-          done++
-        }
-        // History LAST: the forecast/today request answers in ~5s and
-        // draws the chart; Vega's measured-history build takes 30-45s and
-        // the interface is a serial pipe, so anything queued behind it
-        // waits that long. The past minutes fill in when they arrive.
-        if (missingPast.length) {
-          this.progressText = `Loading measured history (Vega can take ~40s)`
-          try {
-            await this.loadHistory(satId, gsId, gen, missingPast, range)
-          } catch (e) {
-            failures.push(`history: ${e.message}`)
-          }
-          if (gen !== this._forecastGen) return
           done++
         }
         this.progressText = ''
@@ -2787,6 +2808,31 @@ export default {
     // days render through the identical per-band bar pipeline as the forecast:
     // same severity colours, legend toggles and tooltip. A 404/timeout
     // is non-fatal upstream - the chart just shows forecast only.
+    // The 'Load measured history' button: fetches the slice the current
+    // window still lacks. Vega's history build takes 30-45s and blocks the
+    // interface while it runs, so it only happens on request.
+    async loadHistoryNow() {
+      const pending = this.pendingHistory
+      if (!pending || this.historyLoading) return
+      const { pastDays, range } = pending
+      this.historyLoading = true
+      this.progressText = 'Loading measured history (Vega can take ~40s)'
+      try {
+        await this.loadHistory(
+          this.selectedSatelliteId,
+          this.selectedGroundStationId,
+          this._forecastGen,
+          pastDays,
+          range,
+        )
+        if (this.pendingHistory === pending) this.pendingHistory = null
+      } catch (e) {
+        this.errorText = `History: ${e.message}`
+      } finally {
+        this.historyLoading = false
+        if (!this.loading) this.progressText = ''
+      }
+    },
     // The measured-history request for a set of past UTC days: clipped to
     // the display window on both ends (a display day in a non-UTC zone
     // starts partway through a UTC day, and the rest of that UTC day is
