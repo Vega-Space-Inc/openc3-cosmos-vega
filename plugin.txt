@@ -13,7 +13,7 @@ VARIABLE vega_poll_period 120
   VARIABLE_DESCRIPTION "Seconds between polls of GET_HEALTH and GET_FORECASTING_SUMMARY (0 disables periodic polling; a poll still runs at connect)"
 VARIABLE vega_slow_poll_period 3600
   VARIABLE_DESCRIPTION "Seconds between polls of GET_APPROVED_ORGS and GET_WORKSPACE, which change on the order of days (0 disables periodic polling; a poll still runs at connect)"
-VARIABLE vega_read_timeout 30.0
+VARIABLE vega_read_timeout 90.0
   VARIABLE_DESCRIPTION "Seconds to wait for an API response"
 VARIABLE vega_connect_timeout 10.0
   VARIABLE_DESCRIPTION "Seconds to wait for the connection to be established"

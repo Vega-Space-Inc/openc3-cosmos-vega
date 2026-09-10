@@ -876,6 +876,20 @@ const MIN_SLOT_PX = 4
 const CMD_OPTS = {
   headers: { 'Ignore-Errors': '400 401 403 404 408 422 500 502 503 504' },
 }
+// Fire-and-forget: the command API normally blocks until the interface
+// acks the write, and the interface only acks AFTER Vega has answered the
+// HTTP request. A slow endpoint (history takes 30-45s) therefore blew the
+// API's 30s ack wait, returned a 500, and got re-sent - each re-send queued
+// behind the first inside the interface until nothing else could get
+// through. The widget already confirms delivery by watching the packet
+// land in the CVT, so it has no use for the ack at all.
+const CMD_KWARGS = { timeout: 0 }
+// Should an ack wait still happen (older COSMOS ignoring timeout: 0), its
+// expiry is not a failure: the request is still in flight.
+function isAckTimeout(e) {
+  const msg = e?.response?.data?.error?.message || e?.message || ''
+  return /waiting for cmd ack/i.test(msg)
+}
 
 // CVT poll cadence while waiting for a command's HTTP response to land, and
 // how long "check again" waits for APPROVED_ORGS to refresh before it
@@ -1899,12 +1913,17 @@ export default {
         const before = await this.readPackets(INTEGRATION_SPEC)
         const okStamp = stampOf(before.APPROVED_ORGS)
         const errStamp = stampOf(before[ERROR_PACKET])
-        await this.api.cmd(
-          'VEGA',
-          'GET_APPROVED_ORGS',
-          this.authOverride(),
-          CMD_OPTS,
-        )
+        try {
+          await this.api.cmd(
+            'VEGA',
+            'GET_APPROVED_ORGS',
+            this.authOverride(),
+            CMD_OPTS,
+            CMD_KWARGS,
+          )
+        } catch (e) {
+          if (!isAckTimeout(e)) throw e
+        }
         const deadline = Date.now() + INTEGRATION_CHECK_TIMEOUT_MS
         while (Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
@@ -2528,7 +2547,7 @@ export default {
         echo: ['ORG_ID'],
         matches: (v) => Number(v.ORG_ID) === Number(orgId),
         payload: ['SATELLITES_JSON'],
-        timeoutMs: 15000,
+        timeoutMs: 60000,
         label: `forecasting summary of org ${orgId}`,
       })
       if (status >= 300) {
@@ -2571,7 +2590,7 @@ export default {
         echo: ['ORG_ID'],
         matches: (v) => Number(v.ORG_ID) === Number(orgId),
         payload: ['SATELLITES_JSON', 'GROUND_STATIONS_JSON'],
-        timeoutMs: 15000,
+        timeoutMs: 60000,
         label: `workspace of org ${orgId}`,
       })
       if (status >= 300) {
@@ -2804,7 +2823,7 @@ export default {
           Number(v.GROUND_STATION_ID) === Number(groundStationId) &&
           v.START_TIME === startIso,
         payload: ['TIMESERIES_JSON'],
-        timeoutMs: 20000,
+        timeoutMs: 150000,
         label: 'history (range may have no coverage)',
       })
       if (status >= 300) {
@@ -2921,12 +2940,17 @@ export default {
       })
       const stamp = stampOf(before[packet])
       const errStamp = stampOf(before[ERROR_PACKET])
-      await this.api.cmd(
-        'VEGA',
-        command,
-        { ...this.authOverride(), ...params },
-        CMD_OPTS,
-      )
+      try {
+        await this.api.cmd(
+          'VEGA',
+          command,
+          { ...this.authOverride(), ...params },
+          CMD_OPTS,
+          CMD_KWARGS,
+        )
+      } catch (e) {
+        if (!isAckTimeout(e)) throw e
+      }
       const pollSpec = {
         [packet]: ['RECEIVED_TIMESECONDS', 'HTTP_STATUS', ...echo],
         [ERROR_PACKET]: ERROR_ITEMS,
@@ -2990,7 +3014,7 @@ export default {
           Number(v.GROUND_STATION_ID) === Number(groundStationId) &&
           v.DATE === date,
         payload: ['MINUTES_JSON', 'TONE_WARNING_MIN', 'TONE_HIGH_MIN'],
-        timeoutMs: 15000,
+        timeoutMs: 90000,
         label: date,
       })
       if (status >= 300) {
