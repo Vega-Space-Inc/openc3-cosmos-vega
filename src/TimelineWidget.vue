@@ -634,11 +634,11 @@
             @click="showAsiInfo = true"
           >
             <v-icon size="15">mdi-information-outline</v-icon>
-            ASI Risk Overview
+            <span class="asi-info-label">ASI Risk Overview</span>
           </button>
         </div>
 
-        <v-dialog v-model="showAsiInfo" max-width="600">
+        <v-dialog v-model="showAsiInfo" max-width="600" scrollable>
           <v-card class="asi-info">
             <v-card-title class="asi-info-title">ASI Risk Overview</v-card-title>
             <v-card-text class="asi-info-body">
@@ -3118,7 +3118,7 @@ export default {
   font-size: 11px;
   cursor: pointer;
 }
-.asi-info-btn:hover {
+.asi-info-btn:hover .asi-info-label {
   text-decoration: underline;
 }
 .asi-info-title {
@@ -3127,6 +3127,10 @@ export default {
 .asi-info-body {
   font-size: 14px;
   line-height: 1.5;
+  /* Capped so the dialog never outgrows the viewport; the body scrolls
+     (v-dialog `scrollable` keeps the title and Close pinned) */
+  max-height: 60vh;
+  overflow-y: auto;
 }
 .asi-info-body h4 {
   margin: 14px 0 6px;
