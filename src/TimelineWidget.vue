@@ -503,13 +503,6 @@
                 @mouseenter="hoverBand = band"
                 @click="onCellClick(band, $event)"
               >
-                <div v-if="expandedBand === band" class="lane-title">
-                  {{ rowBand(band) }}
-                  <template v-if="multiStation">
-                    · {{ stationNames[rowGs(band)] }}</template
-                  >
-                  · ASI Risk
-                </div>
                 <svg
                   class="lane-svg"
                   :viewBox="`${viewStart} ${-CHART_H * LANE_HEADROOM} ${viewEnd - viewStart} ${CHART_H * (1 + LANE_HEADROOM)}`"
@@ -1771,7 +1764,7 @@ export default {
     },
     // Room for band + station names when several stations are selected.
     labelWidthPx() {
-      return this.multiStation ? 150 : 52
+      return this.multiStation ? 176 : 52
     },
     userSizeStyle() {
       if (!this.userSize) return {}
@@ -4175,6 +4168,13 @@ export default {
 .lane-label.hovered .lane-sub {
   opacity: 1;
   font-weight: 600;
+}
+/* Expanded row: the name moves to the top-left so the count ticks own the
+   right edge */
+.lane-label.expanded {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding-top: 6px;
 }
 .lane-label .lane-name {
   font-size: 11px;
