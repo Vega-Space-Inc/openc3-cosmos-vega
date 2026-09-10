@@ -3116,9 +3116,10 @@ export default {
       const keys = this.rowKeys
       const i = keys.indexOf(key)
       if (i < 0 || i === keys.length - 1) return 0
-      return this.rowBand(keys[i + 1]) === this.rowBand(key)
-        ? LANE_GAP_PX
-        : GROUP_GAP_PX
+      if (this.rowBand(keys[i + 1]) === this.rowBand(key)) return LANE_GAP_PX
+      // The wide band-to-band gap makes room for the padded strips, which
+      // only exist with several stations; one station keeps rows close.
+      return this.multiStation ? GROUP_GAP_PX : LANE_GAP_PX
     },
     rowIsFirstOfBand(key) {
       const keys = this.rowKeys
