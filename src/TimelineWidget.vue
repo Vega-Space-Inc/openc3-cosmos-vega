@@ -4217,16 +4217,20 @@ export default {
   position: absolute;
   box-sizing: border-box;
   overflow: hidden;
-  border: 1px solid rgba(128, 128, 128, 0.3);
+  /* An inset shadow rather than a border: it paints on top of the bars
+     that sit on the row's baseline, so the bottom edge never disappears
+     under a full-height bar or a row of stubs */
+  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.3);
   border-radius: 3px;
   pointer-events: none;
+  z-index: 2;
   transition: height 0.15s ease;
 }
 .pass-cell.active {
-  border-color: rgba(255, 255, 255, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
 }
 .pass-cell.placeholder {
-  border-color: transparent;
+  box-shadow: none;
 }
 .skeleton-row {
   position: absolute;
