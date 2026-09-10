@@ -1666,16 +1666,34 @@ export default {
       }
       return result
     },
+    // Whether the loaded data carries the null-vs-0 contract at all. Vega
+    // builds before feat/frontend-counts-nil-when-unanalyzed sent 0 for a
+    // band the run never aggregated, so their all-zero bands can't be
+    // told from clear ones; until a response contains a null somewhere,
+    // an all-zero band is treated as 'no reading' (the old behaviour).
+    // Remove once that API change is deployed everywhere.
+    countsCarryNulls() {
+      for (const entry of this.minuteEntries) {
+        if (!entry || !entry.covered || !entry.counts) continue
+        for (const v of Object.values(entry.counts)) {
+          if (v === null) return true
+        }
+      }
+      return false
+    },
     // Bands with no reading anywhere in the loaded window (every covered
     // minute null). A band that was analysed and found clear all day is NOT
     // empty - it keeps its row, with its cells marked clear.
     emptyBands() {
       const result = {}
       if (!this.hasLoadedData) return result
+      const legacy = !this.countsCarryNulls
       for (const band of this.bands) {
         let any = false
         for (const entry of this.minuteEntries) {
-          if (this.countOf(entry, band) !== null) {
+          const c = this.countOf(entry, band)
+          if (c === null) continue
+          if (!legacy || c > 0) {
             any = true
             break
           }
