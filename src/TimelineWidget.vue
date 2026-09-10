@@ -811,17 +811,14 @@
               :key="'mark-' + (mark.align || 'c') + mark.c"
               class="hour-mark"
               :class="['align-' + (mark.align || 'center'), { hot: mark.hot }]"
-              :style="{
-                left: cToPct(mark.c) + '%',
-                top: (mark.tier ? 15 : 0) + 'px',
-              }"
+              :style="{ left: cToPct(mark.c) + '%' }"
             >
               <div v-for="(line, i) in mark.lines" :key="i">{{ line }}</div>
             </span>
             <!-- Small tick in each gap between passes, separating one
                  pass's start/end times from the next's -->
             <span
-              v-for="seg in segments.slice(1)"
+              v-for="seg in hoverSlot ? [] : segments.slice(1)"
               :key="'axis-sep-' + seg.cstart"
               class="axis-divider"
               :style="{ left: cToPct(seg.cstart - passGapUnits / 2) + '%' }"
@@ -1928,11 +1925,13 @@ export default {
         const c0 = hov.cstart
         const c1 = hov.cstart + hov.clen
         const boxPx = hov.clen * pxPerUnit
-        // both fit side by side, else the end time drops to a second line
-        const tier = boxPx >= width(a) + width(b) + 12 ? 0 : 1
+        // Inside the box when both fit; otherwise flanking it - start time
+        // ending at the left edge, end time beginning at the right edge -
+        // so they never meet.
+        const inside = boxPx >= width(a) + width(b) + 12
         return [
-          { c: c0, lines: [a], align: 'start', hot: true },
-          { c: c1, lines: [b], align: 'end', hot: true, tier },
+          { c: c0, lines: [a], align: inside ? 'start' : 'end', hot: true },
+          { c: c1, lines: [b], align: inside ? 'end' : 'start', hot: true },
         ]
       }
       const marks = []
