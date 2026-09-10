@@ -1886,16 +1886,26 @@ export default {
           const hm = this.formatHM(this.idxToDate(idx))
           return idx === seg.endIdx && hm === '00:00' ? '24:00' : hm
         }
-        const marks = [
-          { c: vStart, lines: [labelAt(toIdx(vStart))], align: 'start' },
-        ]
+        // Edge labels first; a round tick is kept only if its label (in
+        // pixels) clears the edge label on that side - so at a tight zoom
+        // the 6:40 next to a 6:36 edge is dropped rather than drawn on top.
+        const charPx = this.use24h ? 7 : 6.6
+        const labelPx = (t) => t.length * charPx
+        const pxOf = (c) => ((c - vStart) / span) * px
+        const startLabel = labelAt(toIdx(vStart))
+        const endLabel = labelAt(toIdx(vEnd))
+        const leftClear = labelPx(startLabel) + 10
+        const rightClear = px - labelPx(endLabel) - 10
+        const marks = [{ c: vStart, lines: [startLabel], align: 'start' }]
         const first = Math.ceil(toIdx(vStart) / interval) * interval
         for (let idx = first; idx < toIdx(vEnd); idx += interval) {
           const c = seg.cstart + (idx - seg.startIdx)
-          if (c - vStart < interval / 4 || vEnd - c < interval / 4) continue
-          marks.push({ c, lines: [labelAt(idx)] })
+          const label = labelAt(idx)
+          const half = labelPx(label) / 2
+          if (pxOf(c) - half < leftClear || pxOf(c) + half > rightClear) continue
+          marks.push({ c, lines: [label] })
         }
-        marks.push({ c: vEnd, lines: [labelAt(toIdx(vEnd))], align: 'end' })
+        marks.push({ c: vEnd, lines: [endLabel], align: 'end' })
         return marks
       }
       // Several passes: one label per pass, centred under its box, showing
