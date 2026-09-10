@@ -528,7 +528,22 @@
                     hoverCell.band === band &&
                     hoverCell.cstart === seg.cstart,
                 }"
-              />
+              >
+                <span
+                  v-if="
+                    !emptyBands[band] &&
+                    cellStatus[seg.cstart + '|' + band] !== 'data'
+                  "
+                  class="cell-note"
+                  :class="cellStatus[seg.cstart + '|' + band]"
+                >
+                  {{
+                    cellStatus[seg.cstart + '|' + band] === 'clear'
+                      ? 'Clear'
+                      : 'No data'
+                  }}
+                </span>
+              </div>
             </div>
             <!-- A band with nothing in the whole window gets one cell across
                  all the passes saying so, instead of a row of empty boxes. -->
@@ -862,6 +877,21 @@ function zoneMidnightMs(y, m, d, tz) {
   const guess = Date.UTC(y, m, d)
   const first = guess - zoneOffsetMin(guess, tz) * 60000
   return guess - zoneOffsetMin(first, tz) * 60000
+}
+// History points once keyed counts by the raw FrequencyBand name
+// ("S-band"); day_detail and current history use the chart label ("S").
+// Accept both.
+function normalizeBandKeys(counts) {
+  const out = {}
+  for (const [k, v] of Object.entries(counts)) {
+    let label = String(k)
+      .replace(/[-_ ]?band$/i, '')
+      .replace(/_/g, ' ')
+      .toUpperCase()
+    label = { KU: 'Ku', KA: 'Ka', MMWAVE: 'mmWave' }[label] || label
+    out[label] = v
+  }
+  return out
 }
 function pad2(n) {
   return String(n).padStart(2, '0')
@@ -1543,9 +1573,8 @@ export default {
       for (const band of this.bands) {
         let max = 0
         for (const entry of this.minuteEntries) {
-          if (!entry || !entry.covered) continue
-          const c = (entry.counts && entry.counts[band]) || 0
-          if (c > max) max = c
+          const c = this.countOf(entry, band)
+          if (c !== null && c > max) max = c
         }
         result[band] = this.niceMax(max)
       }
@@ -1637,19 +1666,43 @@ export default {
       }
       return result
     },
-    // Bands with no interference anywhere in the loaded window.
+    // Bands with no reading anywhere in the loaded window (every covered
+    // minute null). A band that was analysed and found clear all day is NOT
+    // empty - it keeps its row, with its cells marked clear.
     emptyBands() {
       const result = {}
       if (!this.hasLoadedData) return result
       for (const band of this.bands) {
         let any = false
         for (const entry of this.minuteEntries) {
-          if (entry && entry.covered && (entry.counts?.[band] || 0) > 0) {
+          if (this.countOf(entry, band) !== null) {
             any = true
             break
           }
         }
         result[band] = !any
+      }
+      return result
+    },
+    // Per (pass, band) cell: 'data' (something to draw), 'clear' (readings,
+    // all zero) or 'nodata' (no reading in the pass).
+    cellStatus() {
+      const result = {}
+      for (const seg of this.segments) {
+        for (const band of this.bands) {
+          let seen = false
+          let any = false
+          for (let i = seg.startIdx; i < seg.endIdx; i++) {
+            const c = this.countOf(this.minuteEntries[i], band)
+            if (c === null) continue
+            seen = true
+            if (c > 0) {
+              any = true
+              break
+            }
+          }
+          result[`${seg.cstart}|${band}`] = any ? 'data' : seen ? 'clear' : 'nodata'
+        }
       }
       return result
     },
@@ -1737,17 +1790,17 @@ export default {
         .filter((b) => !this.hoverBand || b === this.hoverBand)
         .map((b) => {
           const count = this.slotCount(b, slot.start, slot.stop)
-          const level = this.levelOf(count, b)
+          const level = this.levelOf(count || 0, b)
           return {
             band: b,
-            count,
+            count: count === null ? '—' : count,
             color: count > 0 ? rampColor(level) : 'transparent',
             toneLabel:
-              count > 0
-                ? `${Math.round(level * 100)}% of ${b} peak`
-                : entry.covered
-                  ? 'Clear'
-                  : '',
+              count === null
+                ? 'No data'
+                : count > 0
+                  ? `${Math.round(level * 100)}% of ${b} peak`
+                  : 'Clear',
           }
         })
       const from = this.formatHM(this.idxToDate(slot.start))
@@ -2422,16 +2475,27 @@ export default {
       }
       return d
     },
+    // A minute's count for a band, or null when there is no reading: the
+    // minute isn't covered, or the API sent null because the run never
+    // aggregated that band (no candidate interferer, or the band was added
+    // after the run). 0 is a reading - analysed, nothing there.
+    countOf(entry, band) {
+      if (!entry || !entry.covered) return null
+      const v = entry.counts ? entry.counts[band] : undefined
+      if (v === null || v === undefined) return null
+      const n = Number(v)
+      return Number.isFinite(n) ? n : null
+    },
     // Worst per-band count across the minutes [start, stop) - what a slot
-    // shows, so grouping never hides a spike.
+    // shows, so grouping never hides a spike. null when no minute in the
+    // slot has a reading.
     slotCount(band, start, stop) {
       const entries = this.minuteEntries
-      let count = 0
+      let count = null
       for (let j = start; j < stop; j++) {
-        const entry = entries[j]
-        if (!entry || !entry.covered) continue
-        const c = (entry.counts && entry.counts[band]) || 0
-        if (c > count) count = c
+        const c = this.countOf(entries[j], band)
+        if (c === null) continue
+        if (count === null || c > count) count = c
       }
       return count
     },
@@ -2950,7 +3014,7 @@ export default {
             minutes[m] = {
               timestamp: minutes[m].timestamp,
               covered: true,
-              counts: point.counts || {},
+              counts: normalizeBandKeys(point.counts || {}),
             }
           }
           const merged = {}
@@ -3636,6 +3700,7 @@ export default {
   flex-direction: column;
 }
 .pass-cell {
+  position: relative;
   height: 46px;
   flex: none;
   box-sizing: border-box;
@@ -3652,6 +3717,22 @@ export default {
 }
 .pass-cell.placeholder {
   border-color: transparent;
+}
+.cell-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.35;
+  pointer-events: none;
+}
+.cell-note.clear {
+  color: #43a047;
+  opacity: 0.7;
 }
 .empty-row {
   position: absolute;

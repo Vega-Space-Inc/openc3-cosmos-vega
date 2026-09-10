@@ -137,7 +137,7 @@ TELEMETRY VEGA DAY_DETAIL BIG_ENDIAN "Interference windows for one satellite+gro
     KEY $.data.tone_thresholds.warning_min
   APPEND_ITEM TONE_HIGH_MIN 32 UINT "Per-band interference count at/above which a minute is toned 'high'"
     KEY $.data.tone_thresholds.high_min
-  APPEND_ITEM MINUTES_JSON 0 ARRAY "Array of {timestamp, minute, covered, counts: {band: count, ...}} - one entry per minute this day. The ForecastTimeline widget derives per-band interference segments from this (not from INTERFERENCE_WINDOWS_JSON, which is a day-level aggregate across all bands)."
+  APPEND_ITEM MINUTES_JSON 0 ARRAY "Array of {timestamp, minute, covered, counts: {band: count|null, ...}} - one entry per minute this day. A count of null means the run never aggregated that band (no reading); 0 means analysed and clear. The ForecastTimeline widget derives per-band interference segments from this (not from INTERFERENCE_WINDOWS_JSON, which is a day-level aggregate across all bands)."
     KEY $.data.minutes
 
 TELEMETRY VEGA HISTORY BIG_ENDIAN "Measured historical interference for one satellite+ground_station over a time range"
