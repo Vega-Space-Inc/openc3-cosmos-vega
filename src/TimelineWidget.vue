@@ -832,6 +832,11 @@ const PASS_GAP_PX = 5
 // Vertical gap between band rows - the same size as the gap between
 // passes, so the chart reads as a grid of (pass x band) cells.
 const LANE_GAP_PX = 5
+// Tallest a collapsed band row grows when the widget has a user-set height.
+// Without a cap a tall widget shared its whole lanes area between the rows
+// (~325px each on a full-height screen); a third of that keeps the
+// collapsed view a row of sparklines and leaves "large" to the expanded band.
+const COLLAPSED_MAX_PX = 110
 // Context minutes on each side of a pass. Zero: slices (unlike the old
 // lines) don't need to rise from a baseline, and any padding is dead space
 // inside the box.
@@ -1764,10 +1769,12 @@ export default {
       return { width: `${this.userSize.w}px`, height: `${this.userSize.h}px` }
     },
     // Band row height in px. Automatic: 46 (220 expanded). With a user-set
-    // height the rows share the lanes area: all rows grow equally, or, with
-    // a band expanded, the others stay at 46 and the expanded one takes the
-    // rest. Never below the automatic sizes, so a short window scrolls
-    // rather than squashing the bars.
+    // height the rows share the lanes area: all rows grow equally up to
+    // COLLAPSED_MAX_PX (a tall widget keeps compact sparklines rather than
+    // three screen-filling rows; clicking a band is how to see it large),
+    // or, with a band expanded, the others stay at 46 and the expanded one
+    // takes the rest. Never below the automatic sizes, so a short window
+    // scrolls rather than squashing the bars.
     rowHeights() {
       const bands = this.rowKeys
       const n = bands.length
@@ -1789,7 +1796,8 @@ export default {
             this.expandedBand === b ? Math.max(baseExpanded, rest) : base
         }
       } else {
-        const each = Math.max(base, Math.floor((this.laneAreaPx - gaps) / n))
+        const share = Math.floor((this.laneAreaPx - gaps) / n)
+        const each = Math.max(base, Math.min(COLLAPSED_MAX_PX, share))
         for (const b of bands) result[b] = each
       }
       return result
