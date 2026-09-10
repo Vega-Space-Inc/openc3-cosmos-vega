@@ -647,9 +647,6 @@
             class="empty-bands-btn"
             @click="showEmptyBands = !showEmptyBands"
           >
-            <v-icon size="15">{{
-              showEmptyBands ? 'mdi-chevron-up' : 'mdi-chevron-down'
-            }}</v-icon>
             {{ showEmptyBands ? 'Hide' : 'Show' }} {{ emptyBandCount }}
             {{ emptyBandCount === 1 ? 'band' : 'bands' }} with no data
           </button>
@@ -3296,13 +3293,13 @@ export default {
 }
 .empty-bands-row {
   display: flex;
+  justify-content: center;
   margin-top: 8px;
 }
 .empty-bands-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 6px 2px 2px;
+  padding: 2px 6px;
   border: none;
   border-radius: 4px;
   background: transparent;
