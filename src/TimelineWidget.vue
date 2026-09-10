@@ -2837,8 +2837,10 @@ export default {
       const daysEnd = new Date(
         `${this.dateAfter(pastDays[pastDays.length - 1].date)}T00:00:00Z`,
       ).getTime()
-      const startIso = new Date(Math.max(daysStart, windowStart)).toISOString()
-      const endIso = new Date(Math.min(daysEnd, windowEnd)).toISOString()
+      // Whole seconds: the API echoes the range back without milliseconds
+      const iso = (ms) => new Date(ms).toISOString().replace('.000Z', 'Z')
+      const startIso = iso(Math.max(daysStart, windowStart))
+      const endIso = iso(Math.min(daysEnd, windowEnd))
       return {
         startIso,
         endIso,
@@ -2978,7 +2980,7 @@ export default {
         matches: (v) =>
           Number(v.SATELLITE_ID) === Number(satelliteId) &&
           Number(v.GROUND_STATION_ID) === Number(groundStationId) &&
-          v.START_TIME === startIso,
+          new Date(v.START_TIME).getTime() === new Date(startIso).getTime(),
         payload: ['TIMESERIES_JSON'],
         timeoutMs: 150000,
         label: 'history (range may have no coverage)',
