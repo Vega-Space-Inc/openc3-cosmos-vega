@@ -4195,12 +4195,12 @@ export default {
   opacity: 1;
   font-weight: 600;
 }
-/* Expanded row: the name moves to the top-left so the count ticks own the
-   right edge */
+/* Expanded row: the name stays right-aligned like every other station
+   label, sitting at the top above the count ticks */
 .lane-label.expanded {
   align-items: flex-start;
-  justify-content: flex-start;
-  padding-top: 6px;
+  justify-content: flex-end;
+  padding-top: 2px;
 }
 .lane-label .lane-name {
   font-size: 11px;
