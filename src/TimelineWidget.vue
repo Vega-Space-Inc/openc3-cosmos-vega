@@ -507,6 +507,19 @@
            its shape), on the green -> amber -> red ramp. Collapsed lanes are
            numberless; clicking one expands it with that band's tick values. -->
       <div v-if="days.length && bands.length" class="lanes-wrap">
+        <!-- Hovered minute's time, above the chart on the hover line. The
+             strip is always there so the chart doesn't move on hover. -->
+        <div class="hover-time-row">
+          <div class="x-axis-spacer" />
+          <div class="hover-time-track">
+            <span
+              v-if="hoverSlot && hasLoadedData"
+              class="hover-time"
+              :style="{ left: cToPct(hoverSlot.cx) + '%' }"
+              >{{ hoverTimeLabel }}</span
+            >
+          </div>
+        </div>
         <div class="lanes-body" @mouseleave="hoverBand = null">
           <!-- With several stations, a faint band behind each band's group
                of rows (labels and plot alike) shows which rows belong
@@ -2348,6 +2361,13 @@ export default {
       const span = this.spanAt(band, slot.start)
       if (!span) return null
       return { band, spanId: span.id, style: this.spanStyle(span) }
+    },
+    hoverTimeLabel() {
+      const slot = this.hoverSlot
+      if (!slot) return ''
+      const from = this.formatHM(this.idxToDate(slot.start))
+      if (slot.stop - slot.start <= 1) return from
+      return `${from} – ${this.formatHM(this.idxToDate(slot.stop - 1))}`
     },
     hoverSpan() {
       const cell = this.hoverCell
@@ -4590,8 +4610,8 @@ export default {
 }
 .hover-line {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 2px;
+  bottom: 4px; /* the plot's 2px bottom padding, plus 2 */
   width: 1px;
   background: rgba(255, 255, 255, 0.55);
   pointer-events: none;
@@ -4600,7 +4620,25 @@ export default {
 .lanes-wrap {
   display: flex;
   flex-direction: column;
-  margin-top: 14px;
+  margin-top: 6px;
+}
+.hover-time-row {
+  display: flex;
+  height: 18px;
+}
+.hover-time-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.hover-time {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .lanes-body {
   position: relative;
@@ -4962,8 +5000,8 @@ export default {
 /* Divider between measured history (left) and forecast (right) */
 .now-line {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 2px;
+  bottom: 4px;
   width: 0;
   border-left: 1px dashed rgba(255, 255, 255, 0.35);
   pointer-events: none;
