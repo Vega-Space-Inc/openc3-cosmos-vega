@@ -436,7 +436,7 @@
                of rows (labels and plot alike) shows which rows belong
                together; the wider gap between groups stays untinted. -->
           <div
-            v-for="g in bandGroups"
+            v-for="g in multiStation ? bandGroups : []"
             :key="'group-' + g.band"
             class="band-group-bg"
             :style="{ top: g.top + 'px', height: g.height + 'px' }"
