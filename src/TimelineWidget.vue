@@ -27,7 +27,18 @@
 -->
 
 <template>
-  <div class="timeline-widget" :style="computedStyle">
+  <!-- resize: both gives the widget a drag grip in its bottom-right corner.
+       The COSMOS screen card sizes to its content, so dragging the grip
+       resizes the whole window; the chosen size is kept per browser and
+       double-clicking the grip corner puts it back to automatic. -->
+  <div
+    ref="root"
+    class="timeline-widget"
+    :class="{ sized: !!userSize }"
+    :style="[computedStyle, userSizeStyle]"
+    @mousedown="onRootMouseDown"
+    @dblclick="onRootDblClick"
+  >
     <div v-if="notIntegrated" class="onboarding">
       <div class="onboarding-banner">
         <v-tooltip location="left" text="Re-check the Vega connection">
@@ -400,6 +411,7 @@
               v-for="band in visibleBandList"
               :key="'label-' + band"
               class="lane-label"
+              :style="{ height: rowHeightPx(band) + 'px' }"
               :class="{
                 expanded: expandedBand === band,
                 hovered: hoverBand === band,
@@ -440,6 +452,7 @@
                 v-for="band in visibleBandList"
                 :key="'lane-' + band"
                 class="lane-plot"
+                :style="{ height: rowHeightPx(band) + 'px' }"
                 :class="{
                   expanded: expandedBand === band,
                   hovered: hoverBand === band,
@@ -519,6 +532,7 @@
                 v-for="band in visibleBandList"
                 :key="'cell-' + band"
                 class="pass-cell"
+                :style="{ height: rowHeightPx(band) + 'px' }"
                 :class="{
                   expanded: expandedBand === band,
                   placeholder: emptyBands[band],
@@ -993,6 +1007,21 @@ const VEGA_APP_URL = 'https://app.vega.space'
 // written to a COSMOS setting (get_setting needs no more than viewer rights,
 // so that would expose it to every user) - see authOverride().
 const API_KEY_LS_KEY = 'vega_widget_api_key'
+const SIZE_LS_KEY = 'vega_widget_size'
+function readStoredSize() {
+  try {
+    const raw = localStorage.getItem(SIZE_LS_KEY)
+    if (!raw) return null
+    const { w, h } = JSON.parse(raw)
+    return Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0
+      ? { w, h }
+      : null
+  } catch (e) {
+    return null
+  }
+}
+// Width of the bottom-right corner that counts as the resize grip.
+const GRIP_PX = 20
 function readStoredApiKey() {
   try {
     return localStorage.getItem(API_KEY_LS_KEY) || null
@@ -1088,6 +1117,12 @@ export default {
       // Rows for bands with nothing in the loaded window are hidden until
       // the user asks for them.
       showEmptyBands: false,
+      // Size the user dragged the widget to ({w, h} in CSS px), or null for
+      // automatic. Remembered in this browser.
+      userSize: readStoredSize(),
+      // Height of the lanes area, kept current by the ResizeObserver; with
+      // a user-set height the band rows share it (see rowHeights).
+      laneAreaPx: 0,
       // Measured history the current window could still fetch on request
       // ({pastDays, range}), and whether that fetch is running.
       pendingHistory: null,
@@ -1616,6 +1651,40 @@ export default {
     rampCss() {
       return `linear-gradient(90deg, ${RAMP_COLORS.join(', ')})`
     },
+    userSizeStyle() {
+      if (!this.userSize) return {}
+      return { width: `${this.userSize.w}px`, height: `${this.userSize.h}px` }
+    },
+    // Band row height in px. Automatic: 46 (220 expanded). With a user-set
+    // height the rows share the lanes area: all rows grow equally, or, with
+    // a band expanded, the others stay at 46 and the expanded one takes the
+    // rest. Never below the automatic sizes, so a short window scrolls
+    // rather than squashing the bars.
+    rowHeights() {
+      const bands = this.visibleBandList
+      const n = bands.length
+      const base = 46
+      const baseExpanded = 220
+      const result = {}
+      if (!this.userSize || !n || !this.laneAreaPx) {
+        for (const b of bands) {
+          result[b] = this.expandedBand === b ? baseExpanded : base
+        }
+        return result
+      }
+      const gaps = (n - 1) * LANE_GAP_PX
+      if (this.expandedBand && bands.includes(this.expandedBand)) {
+        const rest = this.laneAreaPx - gaps - (n - 1) * base
+        for (const b of bands) {
+          result[b] =
+            this.expandedBand === b ? Math.max(baseExpanded, rest) : base
+        }
+      } else {
+        const each = Math.max(base, Math.floor((this.laneAreaPx - gaps) / n))
+        for (const b of bands) result[b] = each
+      }
+      return result
+    },
     // The drag-zoom selection in compressed units, or null when not
     // dragging (or the drag is still narrower than a click).
     dragRangeC() {
@@ -1660,7 +1729,7 @@ export default {
       const result = {}
       let top = 0
       for (const b of this.visibleBandList) {
-        const h = this.expandedBand === b ? 220 : 46
+        const h = this.rowHeights[b]
         result[b] = { top: `${top}px`, height: `${h}px` }
         top += h + LANE_GAP_PX
       }
@@ -2020,6 +2089,49 @@ export default {
     }
   },
   methods: {
+    rowHeightPx(band) {
+      return this.rowHeights[band] || 46
+    },
+    inGrip(e) {
+      const el = this.$refs.root
+      if (!el) return false
+      const r = el.getBoundingClientRect()
+      return r.right - e.clientX <= GRIP_PX && r.bottom - e.clientY <= GRIP_PX
+    },
+    // A press in the grip corner starts a browser resize drag; when it ends
+    // the size is remembered and the viewer's grid is told to re-flow.
+    onRootMouseDown(e) {
+      if (!this.inGrip(e)) return
+      const onUp = () => {
+        window.removeEventListener('mouseup', onUp)
+        const el = this.$refs.root
+        if (!el) return
+        const r = el.getBoundingClientRect()
+        const size = { w: Math.round(r.width), h: Math.round(r.height) }
+        this.userSize = size
+        try {
+          localStorage.setItem(SIZE_LS_KEY, JSON.stringify(size))
+        } catch (err) {
+          // private mode / quota: the size still holds for this page
+        }
+        // Telemetry Viewer lays its screens out with Muuri, which re-flows
+        // on window resize but knows nothing about a screen changing size
+        // on its own.
+        window.dispatchEvent(new Event('resize'))
+      }
+      window.addEventListener('mouseup', onUp)
+    },
+    // Double-click on the grip corner: back to automatic size.
+    onRootDblClick(e) {
+      if (!this.inGrip(e)) return
+      this.userSize = null
+      try {
+        localStorage.removeItem(SIZE_LS_KEY)
+      } catch (err) {
+        // ignore
+      }
+      this.$nextTick(() => window.dispatchEvent(new Event('resize')))
+    },
     // Keeps laneWidthPx current so slotMinutes can size the slices to the
     // pixels actually available. No-op until the lanes element exists.
     observeLaneWidth() {
@@ -2027,11 +2139,16 @@ export default {
       if (!el || el === this._laneObserved) return
       if (this._laneResizeObserver) this._laneResizeObserver.disconnect()
       this._laneObserved = el
-      this.laneWidthPx = el.getBoundingClientRect().width
+      const rect = el.getBoundingClientRect()
+      this.laneWidthPx = rect.width
+      this.laneAreaPx = rect.height
       if (typeof ResizeObserver === 'undefined') return
       this._laneResizeObserver = new ResizeObserver((entries) => {
-        const w = entries[0]?.contentRect?.width
+        const rect = entries[0]?.contentRect
+        const w = rect?.width
+        const h = rect?.height
         if (w && Math.abs(w - this.laneWidthPx) >= 1) this.laneWidthPx = w
+        if (h && Math.abs(h - this.laneAreaPx) >= 1) this.laneAreaPx = h
       })
       this._laneResizeObserver.observe(el)
     },
@@ -3296,7 +3413,22 @@ export default {
   gap: 8px;
   padding: 8px;
   min-width: 700px;
+  min-height: 360px;
+  box-sizing: border-box;
   color: var(--v-theme-on-surface, inherit);
+  /* Browser resize grip in the bottom-right corner (see onRootMouseDown) */
+  resize: both;
+  overflow: auto;
+}
+/* With a user-set height the lanes area takes whatever the controls and
+   legend leave, and the band rows share it (rowHeights) */
+.timeline-widget.sized .lanes-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.timeline-widget.sized .lanes-body {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .controls-col {
   display: flex;
@@ -3650,7 +3782,6 @@ export default {
 }
 .lane-label {
   position: relative;
-  height: 46px;
   flex: none;
   display: flex;
   /* centred on the row, level with the middle of its cells */
@@ -3672,9 +3803,6 @@ export default {
 .lane-label.hovered .lane-name {
   opacity: 1;
   font-weight: 600;
-}
-.lane-label.expanded {
-  height: 220px;
 }
 .lane-label.expanded .lane-name {
   display: none; /* the expanded lane shows its name in .lane-title instead */
@@ -3699,7 +3827,6 @@ export default {
 }
 .lane-plot {
   position: relative;
-  height: 46px;
   margin-bottom: 5px; /* LANE_GAP_PX */
   transition: height 0.15s ease;
 }
@@ -3719,16 +3846,12 @@ export default {
 }
 .pass-cell {
   position: relative;
-  height: 46px;
   flex: none;
   box-sizing: border-box;
   margin-bottom: 5px; /* LANE_GAP_PX */
   border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 3px;
   transition: height 0.15s ease;
-}
-.pass-cell.expanded {
-  height: 220px;
 }
 .pass-cell.active {
   border-color: rgba(255, 255, 255, 0.75);
@@ -3777,9 +3900,6 @@ export default {
 }
 .pass-cell:last-child {
   margin-bottom: 0;
-}
-.lane-plot.expanded {
-  height: 220px;
 }
 .hover-tooltip-row-active {
   font-weight: 700;
