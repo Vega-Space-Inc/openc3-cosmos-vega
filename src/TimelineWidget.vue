@@ -403,20 +403,29 @@
                of rows (labels and plot alike) shows which rows belong
                together; the wider gap between groups stays untinted. -->
           <div
-            v-for="g in bandGroups"
+            v-for="g in multiStation ? bandGroups : []"
             :key="'group-' + g.band"
             class="band-group-bg"
             :style="{ top: g.top + 'px', height: g.height + 'px' }"
           />
-          <div class="lanes-labels">
+          <div class="lanes-labels" :style="{ height: gridHeightPx + 'px' }">
+            <!-- Band header: one bordered, tinted block per band spanning
+                 that band's rows (one row per selected station) -->
+            <div
+              v-for="g in bandGroups"
+              :key="'band-' + g.band"
+              class="band-block"
+              :class="{ hovered: hoverBand && rowBand(hoverBand) === g.band }"
+              :style="{ top: g.rowTop + 'px', height: g.rowHeight + 'px' }"
+            >
+              {{ g.band }}
+            </div>
+            <!-- Per row: the station name, right against its track -->
             <div
               v-for="band in rowKeys"
               :key="'label-' + band"
               class="lane-label"
-              :style="{
-                height: rowHeightPx(band) + 'px',
-                marginBottom: rowGap(band) + 'px',
-              }"
+              :style="rowGeometry[band]"
               :class="{
                 expanded: expandedBand === band,
                 hovered: hoverBand === band,
@@ -424,11 +433,6 @@
               @mouseenter="hoverBand = band"
               @click="onLaneClick(band)"
             >
-              <span
-                class="lane-name"
-                :class="{ blank: !rowIsFirstOfBand(band) }"
-                >{{ rowBand(band) }}</span
-              >
               <span v-if="multiStation" class="lane-sub">{{
                 stationNames[rowGs(band)] || rowGs(band)
               }}</span>
@@ -1754,7 +1758,7 @@ export default {
     },
     // Room for band + station names when several stations are selected.
     labelWidthPx() {
-      return this.multiStation ? 132 : 48
+      return this.multiStation ? 150 : 52
     },
     userSizeStyle() {
       if (!this.userSize) return {}
@@ -1921,7 +1925,6 @@ export default {
     },
     // Vertical extent of each band's group of rows (multi-station only).
     bandGroups() {
-      if (!this.multiStation) return []
       const groups = []
       let current = null
       for (const key of this.rowKeys) {
@@ -1940,9 +1943,19 @@ export default {
       const pad = 4
       return groups.map((g) => ({
         band: g.band,
+        // the tinted strip (padded) and the exact rows extent (band block)
         top: g.top - pad,
         height: g.bottom - g.top + pad * 2,
+        rowTop: g.top,
+        rowHeight: g.bottom - g.top,
       }))
+    },
+    // Total height of the rows, for the absolutely-positioned label column.
+    gridHeightPx() {
+      const keys = this.rowKeys
+      if (!keys.length) return 0
+      const last = this.rowGeometry[keys[keys.length - 1]]
+      return last ? parseFloat(last.top) + parseFloat(last.height) : 0
     },
     allSpans() {
       return this.rowKeys.flatMap((key) => this.rowSpans[key] || [])
@@ -4070,36 +4083,53 @@ export default {
   z-index: 1;
 }
 .lanes-labels {
-  width: var(--label-w, 48px);
+  width: var(--label-w, 52px);
   flex: none;
-  display: flex;
-  flex-direction: column;
-}
-.lane-label {
   position: relative;
-  flex: none;
+}
+/* The band's header block: far left, spanning the band's rows */
+.band-block {
+  position: absolute;
+  left: 0;
+  width: 44px;
+  box-sizing: border-box;
   display: flex;
-  /* centred on the row, level with the middle of its cells */
   align-items: center;
-  justify-content: flex-start;
-  padding-right: 6px;
-  cursor: pointer;
-  transition: height 0.15s ease;
-  flex-direction: column;
-  align-items: flex-start;
   justify-content: center;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+.band-block.hovered {
+  opacity: 1;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+/* Per-row label (station name), right against the track; also the hover /
+   click target for the row */
+.lane-label {
+  position: absolute;
+  left: 52px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  cursor: pointer;
   min-width: 0;
 }
-.lane-name.blank {
-  visibility: hidden;
-}
 .lane-sub {
-  font-size: 10px;
-  opacity: 0.6;
+  font-size: 11px;
+  opacity: 0.75;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+.lane-label.hovered .lane-sub {
+  opacity: 1;
+  font-weight: 600;
 }
 .lane-label .lane-name {
   font-size: 11px;
