@@ -149,8 +149,16 @@
     <template v-else>
       <div class="controls-col">
         <div class="controls-row">
+          <!-- While anything is loading the pickers are shimmer blocks: a
+               disabled Vuetify select draws its text twice, and a control
+               you can't use yet shouldn't look usable. -->
+          <div
+            v-if="busy && organizations.length > 1"
+            class="ctl-skeleton"
+            style="width: 240px"
+          />
           <v-select
-            v-if="organizations.length > 1"
+            v-else-if="organizations.length > 1"
             v-model="selectedOrgId"
             :items="orgOptions"
             item-title="label"
@@ -161,7 +169,9 @@
             style="max-width: 260px"
             :disabled="loading || workspaceLoading"
           />
+          <div v-if="busy" class="ctl-skeleton" style="width: 280px" />
           <v-select
+            v-else
             v-model="selectedSatelliteId"
             :items="satelliteOptions"
             item-title="label"
@@ -173,7 +183,9 @@
             :disabled="loading || workspaceLoading"
           />
           <!-- Multi-select: each selected station adds a row to every band -->
+          <div v-if="busy" class="ctl-skeleton" style="width: 260px" />
           <v-select
+            v-else
             v-model="selectedGroundStationIds"
             :items="groundStationOptions"
             item-title="label"
@@ -310,7 +322,13 @@
         <!-- Plain (variant="text") buttons so the COSMOS shell's outlined /
              filled button overrides don't apply; the container carries the
              same Astro field variables the v-selects above are drawn with. -->
-        <v-btn-toggle v-model="quickDay" variant="text" class="quick-days">
+        <div v-if="busy" class="ctl-skeleton" style="width: 250px" />
+        <v-btn-toggle
+          v-else
+          v-model="quickDay"
+          variant="text"
+          class="quick-days"
+        >
           <v-btn :value="-1" :disabled="loading">Yesterday</v-btn>
           <v-btn :value="0" :disabled="loading">Today</v-btn>
           <v-btn :value="1" :disabled="loading">Tomorrow</v-btn>
@@ -318,7 +336,8 @@
         <!-- Calendar: a compact icon button opening a short list - the last
              four days and the next three - with today and the selected day
              marked and days past the forecast horizon greyed out. -->
-        <v-menu location="bottom start">
+        <div v-if="busy" class="ctl-skeleton" style="width: 96px" />
+        <v-menu v-else location="bottom start">
           <template #activator="{ props }">
             <button
               type="button"
@@ -1385,6 +1404,9 @@ export default {
       return this.selectedGroundStationIds
         .map((id) => this.groundStations.find((gs) => gs.id === id))
         .filter(Boolean)
+    },
+    busy() {
+      return this.loading || this.workspaceLoading
     },
     multiStation() {
       return this.selectedStations.length > 1
@@ -4235,6 +4257,19 @@ export default {
 }
 .pass-cell.placeholder {
   box-shadow: none;
+}
+.ctl-skeleton {
+  height: 32px;
+  flex: none;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
 }
 .skeleton-row {
   position: absolute;
