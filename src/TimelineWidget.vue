@@ -3718,10 +3718,25 @@ export default {
   --v-field-input-padding-bottom: 4px;
   font-size: 12px;
 }
-.controls-row :deep(.v-field__input),
+.controls-row :deep(.v-input__control),
+.controls-row :deep(.v-field),
+.controls-row :deep(.v-field__field) {
+  height: 32px !important;
+  min-height: 32px !important;
+}
+.controls-row :deep(.v-field__input) {
+  font-size: 12px;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  align-items: center;
+}
 .controls-row :deep(.v-select__selection-text) {
   font-size: 12px;
-  min-height: 32px;
+}
+.controls-row :deep(.v-select__selection) {
+  align-items: center;
 }
 .controls-row :deep(.v-chip) {
   height: 20px;
@@ -3730,8 +3745,10 @@ export default {
 .controls-row :deep(.v-btn) {
   font-size: 12px;
 }
-.controls-row :deep(.v-field__append-inner) {
-  padding-top: 4px;
+.controls-row :deep(.v-field__append-inner),
+.controls-row :deep(.v-field__prepend-inner) {
+  padding-top: 0 !important;
+  align-items: center;
 }
 .select-label {
   font-size: 11px;
