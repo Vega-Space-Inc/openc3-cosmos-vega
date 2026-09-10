@@ -743,10 +743,10 @@ const MAX_BACK_DAYS = 30
 // zoom (passGapUnits converts it), so each pass reads as its own block. A
 // satellite that is always visible (GEO) yields a single day-long pass and
 // keeps normal clock ticks.
-const PASS_GAP_PX = 8
+const PASS_GAP_PX = 5
 // Vertical gap between band rows - the same size as the gap between
 // passes, so the chart reads as a grid of (pass x band) cells.
-const LANE_GAP_PX = 8
+const LANE_GAP_PX = 5
 // Context minutes on each side of a pass. Zero: slices (unlike the old
 // lines) don't need to rise from a baseline, and any padding is dead space
 // inside the box.
@@ -3387,7 +3387,7 @@ export default {
   align-items: center;
   justify-content: flex-start;
   padding-right: 6px;
-  margin-bottom: 8px; /* LANE_GAP_PX - keeps labels level with the rows */
+  margin-bottom: 5px; /* LANE_GAP_PX - keeps labels level with the rows */
   cursor: pointer;
   transition: height 0.15s ease;
 }
@@ -3429,7 +3429,7 @@ export default {
 .lane-plot {
   position: relative;
   height: 46px;
-  margin-bottom: 8px; /* LANE_GAP_PX */
+  margin-bottom: 5px; /* LANE_GAP_PX */
   transition: height 0.15s ease;
 }
 .lane-plot:last-child {
@@ -3450,7 +3450,7 @@ export default {
   height: 46px;
   flex: none;
   box-sizing: border-box;
-  margin-bottom: 8px; /* LANE_GAP_PX */
+  margin-bottom: 5px; /* LANE_GAP_PX */
   border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 3px;
   transition: height 0.15s ease;
