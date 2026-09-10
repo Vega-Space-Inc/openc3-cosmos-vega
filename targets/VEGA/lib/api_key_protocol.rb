@@ -50,7 +50,7 @@ module OpenC3
 
     # Paths that need no key and are always sent (GET_HEALTH's
     # /api/v1/health_check; /health kept for older API builds).
-    PUBLIC_PATH_SUFFIXES = ['/health_check', '/health'].freeze
+    PUBLIC_PATH_SUFFIXES = ['/health_check', '/health', '/demo_key'].freeze
 
     def public_request?(extra)
       uri = extra['HTTP_URI'].to_s

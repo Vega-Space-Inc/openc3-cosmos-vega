@@ -36,6 +36,13 @@ COMMAND VEGA GET_HEALTH BIG_ENDIAN "Poll the Vega API health check endpoint (una
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "HEALTH"
   PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
 
+COMMAND VEGA GET_DEMO_KEY BIG_ENDIAN "Fetch Vega's public demo API key (read-only, Demo Org) so a fresh install shows data before the user has a key of their own"
+  ACCESSOR HttpAccessor
+  PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/demo_key"
+  PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
+  PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "DEMO_KEY"
+  PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
+
 COMMAND VEGA GET_APPROVED_ORGS BIG_ENDIAN "Poll the list of organizations this API key's user has approved access to"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/organization_requests/approved_organizations"

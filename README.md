@@ -44,6 +44,12 @@ history.
 
 ## Setup
 
+A fresh install shows data straight away: the widget asks Vega for its
+public **demo key** (read-only access to Vega's Demo Org, served by Vega so
+it can be rotated at any time) and a banner above the chart says so. To see
+your own satellites, click **Connect your own data** on that banner (or
+*Connect your Vega API key…* in the widget's settings menu).
+
 Two ways to give the plugin a Vega API key. Both use a **frontend API key**
 (`vgk_...` prefix, scoped to one Vega user) - not an account-level API token;
 the two are different credential types and are not interchangeable.

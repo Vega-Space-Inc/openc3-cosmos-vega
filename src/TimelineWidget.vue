@@ -147,6 +147,19 @@
     </div>
 
     <template v-else>
+      <!-- Demo mode: data is Vega's public demo org until the user connects
+           a key of their own -->
+      <div v-if="demoMode" class="demo-banner">
+        <v-icon size="15">mdi-satellite-variant</v-icon>
+        <span
+          >Showing Vega's demo satellites{{
+            demoOrgName ? ` (${demoOrgName})` : ''
+          }}</span
+        >
+        <button type="button" class="demo-cta" @click="showKeyDialog = true">
+          Connect your own data →
+        </button>
+      </div>
       <div class="controls-col">
         <div class="controls-row">
           <div class="ctl-wrap" :class="{ busy }">
@@ -304,6 +317,19 @@
                 rel="noopener"
               >
                 <v-list-item-title>API Settings</v-list-item-title>
+              </v-list-item>
+              <v-divider />
+              <v-list-item @click="showKeyDialog = true">
+                <v-list-item-title>{{
+                  savedApiKey
+                    ? 'Change your Vega API key…'
+                    : 'Connect your Vega API key…'
+                }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item v-if="savedApiKey" @click="forgetApiKey">
+                <v-list-item-title
+                  >Forget saved key (…{{ savedApiKeyTail }})</v-list-item-title
+                >
               </v-list-item>
               <v-divider />
               <v-list-item>
@@ -853,6 +879,55 @@
           </button>
         </div>
 
+        <v-dialog v-model="showKeyDialog" max-width="520">
+          <v-card class="asi-info">
+            <v-card-title class="asi-info-title"
+              >Connect your Vega data</v-card-title
+            >
+            <v-card-text class="asi-info-body">
+              <p>
+                Paste a Vega <em>frontend</em> API key (it starts with
+                <code>vgk_</code>) and the chart switches from the demo
+                satellites to your organization's. The key stays in this
+                browser; COSMOS masks it in logs and never stores it.
+              </p>
+              <form class="onboarding-keyform" @submit.prevent="saveApiKey">
+                <div class="onboarding-keyrow">
+                  <input
+                    v-model="apiKeyInput"
+                    class="onboarding-input"
+                    type="password"
+                    placeholder="vgk_…"
+                    autocomplete="off"
+                    spellcheck="false"
+                    :disabled="savingKey"
+                  />
+                  <button
+                    type="submit"
+                    class="onboarding-save"
+                    :disabled="savingKey || !apiKeyInput.trim()"
+                  >
+                    {{ savingKey ? 'Checking…' : 'Connect' }}
+                  </button>
+                </div>
+                <div v-if="saveKeyError" class="onboarding-error">
+                  {{ saveKeyError }}
+                </div>
+              </form>
+              <p class="asi-info-note">
+                No key yet? Create one at
+                <a :href="VEGA_API_KEYS_URL" target="_blank" rel="noopener"
+                  >app.vega.space/settings/api-keys</a
+                >.
+              </p>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="showKeyDialog = false">Close</v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
         <v-dialog v-model="showAsiInfo" max-width="600" scrollable>
           <v-card class="asi-info">
             <v-card-title class="asi-info-title"
@@ -1354,6 +1429,12 @@ export default {
       // Browser-held Vega API key (see API_KEY_LS_KEY) and the entry form
       apiKeyInput: '',
       savedApiKey: readStoredApiKey(),
+      // Vega's public demo key (read-only, Demo Org), fetched from Vega when
+      // this browser has no key of its own. Memory only - never stored.
+      demoKey: null,
+      demoOrgName: '',
+      // The connect-your-own-key dialog (from the demo banner or the menu)
+      showKeyDialog: false,
       savingKey: false,
       saveKeyError: '',
       checkingIntegration: false,
@@ -1428,6 +1509,14 @@ export default {
           o.name +
           (o.satellites_count != null ? ` (${o.satellites_count} sat)` : ''),
       }))
+    },
+    // Connected on Vega's demo key rather than one of the user's own
+    demoMode() {
+      return (
+        this.integrationState === 'connected' &&
+        !this.savedApiKey &&
+        !!this.demoKey
+      )
     },
     savedApiKeyTail() {
       return this.savedApiKey ? this.savedApiKey.slice(-4) : ''
@@ -1902,7 +1991,8 @@ export default {
           const c = seg.cstart + (idx - seg.startIdx)
           const label = labelAt(idx)
           const half = labelPx(label) / 2
-          if (pxOf(c) - half < leftClear || pxOf(c) + half > rightClear) continue
+          if (pxOf(c) - half < leftClear || pxOf(c) + half > rightClear)
+            continue
           marks.push({ c, lines: [label] })
         }
         marks.push({ c: vEnd, lines: [endLabel], align: 'end' })
@@ -1918,7 +2008,8 @@ export default {
       const pxPerUnit = px / span
       const charPx = this.use24h ? 7 : 6.6
       const width = (text) => text.length * charPx
-      const hov = this.hoverSpan || (this.hoverSlot && this.hoverSlot.seg) || null
+      const hov =
+        this.hoverSpan || (this.hoverSlot && this.hoverSlot.seg) || null
       if (hov) {
         const a = this.formatHM(this.idxToDate(hov.startIdx))
         const b = this.formatHM(this.idxToDate(hov.endIdx))
@@ -2640,6 +2731,15 @@ export default {
         // fall through to the active probe
       }
       await this.retryIntegrationCheck()
+      // No key of its own and Vega didn't accept the (empty) request: try
+      // the public demo key so a fresh install shows data straight away.
+      if (
+        this.integrationState === 'missing_key' &&
+        !this.savedApiKey &&
+        !this.demoKey
+      ) {
+        if (await this.fetchDemoKey()) await this.retryIntegrationCheck()
+      }
     },
     // "Check again" button in the onboarding state (and the mount-time
     // fallback): sends GET_APPROVED_ORGS and waits for the answer to land.
@@ -2722,9 +2822,30 @@ export default {
     // Sent with every command as the OBFUSCATEd HTTP_HEADER_AUTHORIZATION
     // parameter. Absent -> the interface falls back to the VEGA_API_KEY secret.
     authOverride() {
-      return this.savedApiKey
-        ? { HTTP_HEADER_AUTHORIZATION: `Bearer ${this.savedApiKey}` }
-        : {}
+      const key = this.savedApiKey || this.demoKey
+      return key ? { HTTP_HEADER_AUTHORIZATION: `Bearer ${key}` } : {}
+    },
+    // Asks Vega for its public demo key. Resolves to true when one arrived.
+    async fetchDemoKey() {
+      try {
+        const { status, values } = await this.requestPacket({
+          command: 'GET_DEMO_KEY',
+          params: {},
+          packet: 'DEMO_KEY',
+          echo: [],
+          matches: () => true,
+          payload: ['API_KEY', 'ORG_NAME'],
+          timeoutMs: 15000,
+          label: 'demo key',
+        })
+        const key = status === 200 ? String(values.API_KEY || '').trim() : ''
+        if (!key.startsWith('vgk_')) return false
+        this.demoKey = key
+        this.demoOrgName = String(values.ORG_NAME || '')
+        return true
+      } catch (e) {
+        return false
+      }
     },
     async saveApiKey() {
       const key = (this.apiKeyInput || '').trim()
@@ -2748,19 +2869,31 @@ export default {
         if (this.integrationState === 'missing_key') {
           this.saveKeyError =
             'Vega rejected that key (HTTP 401). Check it and try again.'
+        } else if (this.integrationState === 'connected') {
+          this.showKeyDialog = false
+          await this.loadWorkspaceForCurrentOrg()
         }
       } finally {
         this.savingKey = false
       }
     },
-    forgetApiKey() {
+    async forgetApiKey() {
       this.savedApiKey = null
       try {
         localStorage.removeItem(API_KEY_LS_KEY)
       } catch (e) {
         // nothing stored
       }
+      this.saveKeyError = ''
+      this.showKeyDialog = false
       this.setIntegrationState('missing_key')
+      // Back to the demo, if Vega offers one
+      if (this.demoKey || (await this.fetchDemoKey())) {
+        await this.retryIntegrationCheck()
+        if (this.integrationState === 'connected') {
+          await this.loadWorkspaceForCurrentOrg()
+        }
+      }
     },
     setIntegrationState(state, status = null, detail = '') {
       this.integrationState = state
@@ -3117,7 +3250,8 @@ export default {
     hatchSize(key) {
       const view = Math.max(1, this.viewEnd - this.viewStart)
       const uxPerPx = view / (this.laneWidthPx || 1200)
-      const uyPerPx = (CHART_H * (1 + LANE_HEADROOM)) / (this.rowHeightPx(key) || 1)
+      const uyPerPx =
+        (CHART_H * (1 + LANE_HEADROOM)) / (this.rowHeightPx(key) || 1)
       return { width: 6 * uxPerPx, height: 6 * uyPerPx }
     },
     clearSpans(key) {
@@ -4212,6 +4346,29 @@ export default {
 .build-stamp {
   font-size: 11px;
   opacity: 0.6;
+}
+.demo-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid rgba(79, 195, 247, 0.35);
+  border-radius: 4px;
+  background: rgba(79, 195, 247, 0.06);
+  font-size: 12px;
+}
+.demo-cta {
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid rgba(79, 195, 247, 0.6);
+  border-radius: 4px;
+  background: transparent;
+  color: #4fc3f7;
+  font-size: 12px;
+  cursor: pointer;
+}
+.demo-cta:hover {
+  background: rgba(79, 195, 247, 0.12);
 }
 .asi-info-btn {
   display: inline-flex;

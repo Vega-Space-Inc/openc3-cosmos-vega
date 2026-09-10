@@ -35,6 +35,16 @@ TELEMETRY VEGA ERROR_RESPONSE BIG_ENDIAN "Non-2xx response from any Vega endpoin
     LIMITS DEFAULT 1 ENABLED 199 199 300 300
   APPEND_ITEM BODY 0 STRING "Raw response body (HTML or JSON, unparsed)"
 
+TELEMETRY VEGA DEMO_KEY BIG_ENDIAN "Vega's public demo API key: read-only access to the Demo Org, served by Vega so it can be rotated without a plugin release. Nothing secret - it is what any visitor gets."
+  ACCESSOR HttpAccessor JsonAccessor
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 404 means no demo key is on offer"
+  APPEND_ITEM API_KEY 512 STRING "The demo frontend API key (vgk_...)"
+    KEY $.data.api_key
+  APPEND_ITEM ORG_ID 32 UINT "Demo organization id"
+    KEY $.data.organization_id
+  APPEND_ITEM ORG_NAME 256 STRING "Demo organization name"
+    KEY $.data.organization_name
+
 TELEMETRY VEGA APPROVED_ORGS BIG_ENDIAN "Organizations this API key's user has approved access to - use these ids for vega_org_id"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 401 means the key is bad/expired"
