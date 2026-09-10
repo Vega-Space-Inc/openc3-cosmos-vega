@@ -149,69 +149,69 @@
     <template v-else>
       <div class="controls-col">
         <div class="controls-row">
-          <!-- While anything is loading the pickers are shimmer blocks: a
-               disabled Vuetify select draws its text twice, and a control
-               you can't use yet shouldn't look usable. -->
           <div
-            v-if="busy && organizations.length > 1"
-            class="ctl-skeleton"
-            style="width: 240px"
-          />
-          <v-select
-            v-else-if="organizations.length > 1"
-            v-model="selectedOrgId"
-            :items="orgOptions"
-            item-title="label"
-            item-value="id"
-            density="compact"
-            hide-details
-            variant="outlined"
-            style="max-width: 260px"
-            :disabled="loading || workspaceLoading"
-          />
-          <div v-if="busy" class="ctl-skeleton" style="width: 280px" />
-          <v-select
-            v-else
-            v-model="selectedSatelliteId"
-            :items="satelliteOptions"
-            item-title="label"
-            item-value="id"
-            density="compact"
-            hide-details
-            variant="outlined"
-            style="max-width: 280px"
-            :disabled="loading || workspaceLoading"
-          />
-          <!-- Multi-select: each selected station adds a row to every band -->
-          <div v-if="busy" class="ctl-skeleton" style="width: 260px" />
-          <v-select
-            v-else
-            v-model="selectedGroundStationIds"
-            :items="groundStationOptions"
-            item-title="label"
-            item-value="id"
-            multiple
-            density="compact"
-            hide-details
-            variant="outlined"
-            style="max-width: 360px"
-            :disabled="loading || workspaceLoading"
+            class="ctl-wrap"
+            :class="{ busy }"
+            v-if="organizations.length > 1"
           >
-            <!-- Two chips, then '+N': the field stays one line high -->
-            <template #selection="{ item, index }">
-              <v-chip
-                v-if="index < 2"
-                size="small"
-                closable
-                @click:close.stop="removeStation(item.value)"
-              >
-                {{ item.title }}
-              </v-chip>
-              <span v-else-if="index === 2" class="more-selected"
-                >+{{ selectedGroundStationIds.length - 2 }}</span
-              >
-            </template>
-          </v-select>
+            <v-select
+              v-model="selectedOrgId"
+              :items="orgOptions"
+              item-title="label"
+              item-value="id"
+              density="compact"
+              hide-details
+              variant="outlined"
+              style="max-width: 260px"
+              :disabled="loading || workspaceLoading"
+            />
+            <div v-if="busy" class="ctl-shimmer" />
+          </div>
+          <div class="ctl-wrap" :class="{ busy }">
+            <v-select
+              v-model="selectedSatelliteId"
+              :items="satelliteOptions"
+              item-title="label"
+              item-value="id"
+              density="compact"
+              hide-details
+              variant="outlined"
+              style="max-width: 280px"
+              :disabled="loading || workspaceLoading"
+            />
+            <div v-if="busy" class="ctl-shimmer" />
+          </div>
+          <!-- Multi-select: each selected station adds a row to every band -->
+          <div class="ctl-wrap" :class="{ busy }">
+            <v-select
+              v-model="selectedGroundStationIds"
+              :items="groundStationOptions"
+              item-title="label"
+              item-value="id"
+              multiple
+              density="compact"
+              hide-details
+              variant="outlined"
+              style="max-width: 360px"
+              :disabled="loading || workspaceLoading"
+            >
+              <!-- Two chips, then '+N': the field stays one line high -->
+              <template #selection="{ item, index }">
+                <v-chip
+                  v-if="index < 2"
+                  size="small"
+                  closable
+                  @click:close.stop="removeStation(item.value)"
+                >
+                  {{ item.title }}
+                </v-chip>
+                <span v-else-if="index === 2" class="more-selected"
+                  >+{{ selectedGroundStationIds.length - 2 }}</span
+                >
+              </template>
+            </v-select>
+            <div v-if="busy" class="ctl-shimmer" />
+          </div>
           <v-btn
             color="primary"
             variant="flat"
@@ -322,52 +322,53 @@
         <!-- Plain (variant="text") buttons so the COSMOS shell's outlined /
              filled button overrides don't apply; the container carries the
              same Astro field variables the v-selects above are drawn with. -->
-        <div v-if="busy" class="ctl-skeleton" style="width: 250px" />
-        <v-btn-toggle
-          v-else
-          v-model="quickDay"
-          variant="text"
-          class="quick-days"
-        >
-          <v-btn :value="-1" :disabled="loading">Yesterday</v-btn>
-          <v-btn :value="0" :disabled="loading">Today</v-btn>
-          <v-btn :value="1" :disabled="loading">Tomorrow</v-btn>
-        </v-btn-toggle>
+        <div class="ctl-wrap" :class="{ busy }">
+          <v-btn-toggle v-model="quickDay" variant="text" class="quick-days">
+            <v-btn :value="-1" :disabled="loading">Yesterday</v-btn>
+            <v-btn :value="0" :disabled="loading">Today</v-btn>
+            <v-btn :value="1" :disabled="loading">Tomorrow</v-btn>
+          </v-btn-toggle>
+          <div v-if="busy" class="ctl-shimmer" />
+        </div>
         <!-- Calendar: a compact icon button opening a short list - the last
              four days and the next three - with today and the selected day
              marked and days past the forecast horizon greyed out. -->
-        <div v-if="busy" class="ctl-skeleton" style="width: 96px" />
-        <v-menu v-else location="bottom start">
-          <template #activator="{ props }">
-            <button
-              type="button"
-              class="cal-btn"
-              :disabled="loading"
-              v-bind="props"
-              :title="`${days[0].weekday} ${days[0].display}`"
-            >
-              <v-icon size="18">mdi-calendar</v-icon>
-              <span class="cal-btn-date">{{ days[0].display }}</span>
-            </button>
-          </template>
-          <v-list density="compact" class="cal-list">
-            <v-list-item
-              v-for="d in calendarDays"
-              :key="'cal-' + d.offset"
-              :active="d.offset === windowOffsetDays"
-              :disabled="d.disabled"
-              @click="setWindowOffset(d.offset)"
-            >
-              <v-list-item-title>
-                <span class="cal-weekday">{{ d.weekday }}</span>
-                {{ d.display }}
-              </v-list-item-title>
-              <template #append>
-                <span class="day-kind" :class="d.kind">{{ d.kindLabel }}</span>
-              </template>
-            </v-list-item>
-          </v-list>
-        </v-menu>
+        <div class="ctl-wrap" :class="{ busy }">
+          <v-menu location="bottom start">
+            <template #activator="{ props }">
+              <button
+                type="button"
+                class="cal-btn"
+                :disabled="loading"
+                v-bind="props"
+                :title="`${days[0].weekday} ${days[0].display}`"
+              >
+                <v-icon size="18">mdi-calendar</v-icon>
+                <span class="cal-btn-date">{{ days[0].display }}</span>
+              </button>
+            </template>
+            <v-list density="compact" class="cal-list">
+              <v-list-item
+                v-for="d in calendarDays"
+                :key="'cal-' + d.offset"
+                :active="d.offset === windowOffsetDays"
+                :disabled="d.disabled"
+                @click="setWindowOffset(d.offset)"
+              >
+                <v-list-item-title>
+                  <span class="cal-weekday">{{ d.weekday }}</span>
+                  {{ d.display }}
+                </v-list-item-title>
+                <template #append>
+                  <span class="day-kind" :class="d.kind">{{
+                    d.kindLabel
+                  }}</span>
+                </template>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+          <div v-if="busy" class="ctl-shimmer" />
+        </div>
         <div class="window-nav-right">
           <v-btn
             v-if="historyNeeded"
@@ -4273,9 +4274,18 @@ export default {
 .pass-cell.placeholder {
   box-shadow: none;
 }
-.ctl-skeleton {
-  height: 32px;
-  flex: none;
+/* While busy, each control stays in the layout (so it keeps its exact
+   width) but is hidden under a shimmer of the same size */
+.ctl-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.ctl-wrap.busy > :first-child {
+  visibility: hidden;
+}
+.ctl-shimmer {
+  position: absolute;
+  inset: 0;
   border-radius: 4px;
   background: linear-gradient(
     90deg,
