@@ -437,14 +437,14 @@
             <template v-else-if="loading">{{ progressText }}</template>
             <template v-else>{{ errorText }}</template>
           </span>
-          <v-btn
+          <button
             v-if="zoomRange"
-            variant="outlined"
-            style="height: 32px"
+            type="button"
+            class="quiet-link"
             @click="resetZoom"
           >
             Reset zoom ({{ zoomSpanLabel }})
-          </v-btn>
+          </button>
           <button
             v-if="tlmItem"
             type="button"
@@ -800,7 +800,7 @@
           <div class="x-axis-spacer" />
           <button
             type="button"
-            class="empty-bands-btn"
+            class="quiet-link"
             @click="showEmptyBands = !showEmptyBands"
           >
             {{ showEmptyBands ? 'Hide' : 'Show' }} {{ emptyBandCount }}
@@ -4054,18 +4054,23 @@ export default {
   justify-content: center;
   margin-top: 8px;
 }
-.empty-bands-btn {
+/* Quiet text actions (Reset zoom, show/hide bands with no data): plain
+   muted text that only takes on the link colour when hovered */
+.quiet-link {
   display: inline-flex;
   align-items: center;
   padding: 2px 6px;
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: #4fc3f7;
+  color: inherit;
+  opacity: 0.55;
   font-size: 11px;
   cursor: pointer;
 }
-.empty-bands-btn:hover {
+.quiet-link:hover {
+  opacity: 1;
+  color: #4fc3f7;
   text-decoration: underline;
 }
 .build-stamp {
