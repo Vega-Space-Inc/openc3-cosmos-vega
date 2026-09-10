@@ -619,6 +619,14 @@
             >
               {{ mark.label }}
             </span>
+            <!-- Small tick in each gap between passes, separating one
+                 pass's start/end times from the next's -->
+            <span
+              v-for="seg in segments.slice(1)"
+              :key="'axis-sep-' + seg.cstart"
+              class="axis-divider"
+              :style="{ left: cToPct(seg.cstart - passGapUnits / 2) + '%' }"
+            />
           </div>
         </div>
         <div v-if="emptyBandCount" class="empty-bands-row">
@@ -3826,6 +3834,14 @@ export default {
   font-size: 9px;
   opacity: 0.45;
   white-space: nowrap;
+}
+.axis-divider {
+  position: absolute;
+  top: 1px;
+  height: 12px;
+  width: 0;
+  border-left: 1px solid rgba(128, 128, 128, 0.45);
+  pointer-events: none;
 }
 .hour-mark.align-start {
   transform: none;
