@@ -3776,6 +3776,20 @@ export default {
 .quick-days .v-btn + .v-btn {
   border-left: 1px solid var(--color-border-interactive-muted);
 }
+/* Hover like the v-selects beside it: the border brightens (Vuetify lifts
+   an outlined field's outline to high emphasis on hover) and nothing else
+   changes - so no per-segment button overlay */
+.quick-days:hover,
+.cal-btn:hover:not(:disabled) {
+  border-color: var(
+    --color-border-interactive-hover,
+    var(--color-text-interactive-default)
+  );
+}
+.quick-days .v-btn .v-btn__overlay,
+.quick-days .v-btn:hover .v-btn__overlay {
+  opacity: 0 !important;
+}
 .quick-days .v-btn.v-btn--active {
   background-color: var(--color-background-surface-selected);
 }
