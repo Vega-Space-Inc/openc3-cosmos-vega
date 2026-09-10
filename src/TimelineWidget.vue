@@ -2162,7 +2162,7 @@ export default {
           current.bottom = bottom
         }
       }
-      const pad = 4
+      const pad = 8
       return groups.map((g) => ({
         band: g.band,
         // the tinted strip (padded) and the exact rows extent (band block)
@@ -3083,6 +3083,9 @@ export default {
         y: -CHART_H * LANE_HEADROOM + uyPerPx * 0.5,
         width: Math.max(0, span.clen - uxPerPx),
         height: Math.max(0, vbH - uyPerPx),
+        // 4px corners, matching the rest of the chart, in each axis' units
+        rx: 4 * uxPerPx,
+        ry: 4 * uyPerPx,
       }
     },
     spanWidthPx(span) {
@@ -3959,7 +3962,7 @@ export default {
   /* Browser resize grip in the bottom-right corner (see onRootMouseDown):
      width only - the rows have fixed heights */
   resize: horizontal;
-  overflow: auto;
+  overflow: hidden;
 }
 .controls-col {
   display: flex;
@@ -4377,11 +4380,13 @@ export default {
 }
 .band-group-bg {
   position: absolute;
-  /* Full bleed: out through the widget's 8px padding to its edges, so the
-     strip runs edge to edge rather than stopping at the labels */
+  /* 8px of air on every side of the band's rows: out past the band block
+     on the left and the tracks on the right, and above / below the rows
+     (bandGroups pads the top and bottom by the same amount) */
   left: -8px;
   right: -8px;
   z-index: 0;
+  border-radius: 4px;
   pointer-events: none;
 }
 .lanes-labels,
@@ -4493,7 +4498,7 @@ export default {
   overflow: hidden;
   /* The outline itself is drawn inside the row's SVG (see svgRect); this
      element only carries the Clear / No data note */
-  border-radius: 3px;
+  border-radius: 4px;
   pointer-events: none;
   z-index: 3;
   transition: height 0.15s ease;
@@ -4524,7 +4529,7 @@ export default {
   position: absolute;
   left: 0;
   right: 0;
-  border-radius: 3px;
+  border-radius: 4px;
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0.04) 25%,
@@ -4568,7 +4573,7 @@ export default {
   right: 0;
   box-sizing: border-box;
   border: 1px solid rgba(128, 128, 128, 0.3);
-  border-radius: 3px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4842,7 +4847,7 @@ export default {
 .onboarding-body code {
   font-size: 12px;
   padding: 1px 4px;
-  border-radius: 3px;
+  border-radius: 4px;
   background: rgba(128, 128, 128, 0.2);
 }
 // CTAs stack under the copy: primary button, then secondary text link
@@ -4891,7 +4896,7 @@ export default {
 .onboarding-steps code {
   font-size: 12px;
   padding: 1px 4px;
-  border-radius: 3px;
+  border-radius: 4px;
   background: rgba(128, 128, 128, 0.2);
 }
 .onboarding-error {
