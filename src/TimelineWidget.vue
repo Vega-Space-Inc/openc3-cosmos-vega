@@ -1227,8 +1227,16 @@ export default {
       return (this.selectedSatellite && this.selectedSatellite.bands) || []
     },
     // Bands currently shown as lanes (the legend chips toggle these).
+    // Bands with data first (in the satellite's own order), then the ones
+    // with nothing in the loaded window, so the empty 'No data' rows sink
+    // to the bottom instead of splitting the chart.
     visibleBandList() {
-      return this.bands.filter((b) => this.visibleBands[b])
+      const visible = this.bands.filter((b) => this.visibleBands[b])
+      const empty = this.emptyBands
+      return [
+        ...visible.filter((b) => !empty[b]),
+        ...visible.filter((b) => empty[b]),
+      ]
     },
     // The WINDOW_DAYS-day sliding window, first day at windowOffsetDays
     // relative to today. `past` days are filled by GET_HISTORY (measured,
