@@ -35,7 +35,11 @@
     ref="root"
     class="timeline-widget"
     :class="{ sized: !!userSize }"
-    :style="[computedStyle, userSizeStyle, { '--label-w': labelWidthPx + 'px' }]"
+    :style="[
+      computedStyle,
+      userSizeStyle,
+      { '--label-w': labelWidthPx + 'px' },
+    ]"
     @mousedown="onRootMouseDown"
     @dblclick="onRootDblClick"
   >
@@ -421,9 +425,11 @@
               @mouseenter="hoverBand = band"
               @click="onLaneClick(band)"
             >
-              <span class="lane-name" :class="{ blank: !rowIsFirstOfBand(band) }">{{
-                rowBand(band)
-              }}</span>
+              <span
+                class="lane-name"
+                :class="{ blank: !rowIsFirstOfBand(band) }"
+                >{{ rowBand(band) }}</span
+              >
               <span v-if="multiStation" class="lane-sub">{{
                 stationNames[rowGs(band)] || rowGs(band)
               }}</span>
@@ -454,7 +460,18 @@
               class="cell-highlight"
               :style="hoverCell.style"
             />
-            <div class="lanes-stack">
+            <!-- While a load is in flight the rows shimmer and nothing else
+                 is drawn: the chart appears whole when every station and
+                 day has landed, instead of re-flowing as each one does. -->
+            <template v-if="loading">
+              <div
+                v-for="key in rowKeys"
+                :key="'skel-' + key"
+                class="skeleton-row"
+                :style="rowGeometry[key]"
+              />
+            </template>
+            <div v-if="!loading" class="lanes-stack">
               <div
                 v-for="band in rowKeys"
                 :key="'lane-' + band"
@@ -535,53 +552,55 @@
                  pass, so with several stations the empty space falls
                  BETWEEN boxes rather than inside them; a station that
                  doesn't see a pass has no box there at all. -->
-            <div
-              v-for="span in allSpans"
-              :key="span.id"
-              class="pass-cell"
-              :style="spanStyle(span)"
-              :class="{
-                expanded: expandedBand === span.key,
-                placeholder: emptyBands[rowBand(span.key)],
-                active:
-                  !emptyBands[rowBand(span.key)] &&
-                  hoverCell &&
-                  hoverCell.spanId === span.id,
-              }"
-            >
-              <span
-                v-if="
-                  !emptyBands[rowBand(span.key)] &&
-                  cellStatus[span.id] !== 'data'
-                "
-                class="cell-note"
-                :class="cellStatus[span.id]"
+            <template v-if="!loading">
+              <div
+                v-for="span in allSpans"
+                :key="span.id"
+                class="pass-cell"
+                :style="spanStyle(span)"
+                :class="{
+                  expanded: expandedBand === span.key,
+                  placeholder: emptyBands[rowBand(span.key)],
+                  active:
+                    !emptyBands[rowBand(span.key)] &&
+                    hoverCell &&
+                    hoverCell.spanId === span.id,
+                }"
               >
-                {{
-                  cellStatus[span.id] === 'clear'
-                    ? 'Clear'
-                    : cellStatus[span.id] === 'loading'
-                      ? 'Loading…'
-                      : 'No data'
-                }}
-              </span>
-            </div>
-            <!-- A band with nothing in the whole window gets one cell across
+                <span
+                  v-if="
+                    !emptyBands[rowBand(span.key)] &&
+                    cellStatus[span.id] !== 'data'
+                  "
+                  class="cell-note"
+                  :class="cellStatus[span.id]"
+                >
+                  {{
+                    cellStatus[span.id] === 'clear'
+                      ? 'Clear'
+                      : cellStatus[span.id] === 'loading'
+                        ? 'Loading…'
+                        : 'No data'
+                  }}
+                </span>
+              </div>
+              <!-- A band with nothing in the whole window gets one cell across
                  all the passes saying so, instead of a row of empty boxes. -->
-            <div
-              v-for="band in rowKeys.filter((k) => emptyBands[rowBand(k)])"
-              :key="'empty-' + band"
-              class="empty-row"
-              :style="rowGeometry[band]"
-            >
-              No data
-            </div>
-            <div
-              v-if="hasLoadedData && !segments.length"
-              class="no-passes-note"
-            >
-              No passes in this window
-            </div>
+              <div
+                v-for="band in rowKeys.filter((k) => emptyBands[rowBand(k)])"
+                :key="'empty-' + band"
+                class="empty-row"
+                :style="rowGeometry[band]"
+              >
+                No data
+              </div>
+              <div
+                v-if="hasLoadedData && !segments.length"
+                class="no-passes-note"
+              >
+                No passes in this window
+              </div>
+            </template>
             <div
               v-if="
                 nowMarkerC !== null &&
@@ -658,7 +677,7 @@
           <div class="x-axis-spacer" />
           <div class="x-axis">
             <span
-              v-for="mark in axisMarks"
+              v-for="mark in loading ? [] : axisMarks"
               :key="'mark-' + (mark.align || 'c') + mark.c"
               class="hour-mark"
               :class="'align-' + (mark.align || 'center')"
@@ -706,24 +725,25 @@
 
         <v-dialog v-model="showAsiInfo" max-width="600" scrollable>
           <v-card class="asi-info">
-            <v-card-title class="asi-info-title">ASI Risk Overview</v-card-title>
+            <v-card-title class="asi-info-title"
+              >ASI Risk Overview</v-card-title
+            >
             <v-card-text class="asi-info-body">
               <p>
-                <strong>Adjacent satellite interference (ASI)</strong> is
-                the risk that another satellite transmitting in the same
-                frequency band is in your ground station's view at the same
-                time as the satellite you are tracking, so its signal can
-                land in your receiver alongside the one you want.
+                <strong>Adjacent satellite interference (ASI)</strong> is the
+                risk that another satellite transmitting in the same frequency
+                band is in your ground station's view at the same time as the
+                satellite you are tracking, so its signal can land in your
+                receiver alongside the one you want.
               </p>
               <h4>How Vega calculates it</h4>
               <ol>
                 <li>
-                  <strong>Visibility.</strong> Vega propagates the orbit of
-                  the selected satellite and works out, minute by minute,
-                  when it is above the horizon from the selected ground
-                  station. Those minutes are the passes you see as boxes;
-                  a satellite that is always in view (GEO) gives one
-                  box for the whole day.
+                  <strong>Visibility.</strong> Vega propagates the orbit of the
+                  selected satellite and works out, minute by minute, when it is
+                  above the horizon from the selected ground station. Those
+                  minutes are the passes you see as boxes; a satellite that is
+                  always in view (GEO) gives one box for the whole day.
                 </li>
                 <li>
                   <strong>Candidates.</strong> From the catalog of tracked
@@ -732,8 +752,8 @@
                   other bands are ignored.
                 </li>
                 <li>
-                  <strong>Overlap.</strong> For every covered minute and
-                  every band, it counts how many of those candidates are
+                  <strong>Overlap.</strong> For every covered minute and every
+                  band, it counts how many of those candidates are
                   simultaneously in view of the station. That count is the
                   <strong>interferer count</strong> - the number behind each
                   bar.
@@ -742,33 +762,31 @@
               <h4>Reading the chart</h4>
               <ul>
                 <li>
-                  Each bar is one minute (or a few minutes when the view is
-                  too narrow to show them individually - the tooltip then
-                  says which). Its height and colour are that minute's
-                  interferer count relative to the band's busiest minute in
-                  the loaded day, from green (quiet) through amber to red
-                  (the peak). The tooltip gives the actual count.
+                  Each bar is one minute (or a few minutes when the view is too
+                  narrow to show them individually - the tooltip then says
+                  which). Its height and colour are that minute's interferer
+                  count relative to the band's busiest minute in the loaded day,
+                  from green (quiet) through amber to red (the peak). The
+                  tooltip gives the actual count.
                 </li>
                 <li>
-                  Vega's own severity scale is absolute: a minute with
-                  1 or more interferers is a <em>warning</em> and 10 or more
-                  is <em>high</em>. The COSMOS limits on the
+                  Vega's own severity scale is absolute: a minute with 1 or more
+                  interferers is a <em>warning</em> and 10 or more is
+                  <em>high</em>. The COSMOS limits on the
                   <code>FORECASTING_SUMMARY</code> packet use that scale.
                 </li>
                 <li>
-                  Today and the next two days come from the latest forecast
-                  run (refreshed several times a day); earlier days are the
-                  measured record for that day. The chart only shows time
-                  when the satellite is in view - gaps between passes are
-                  removed.
+                  Today and the next two days come from the latest forecast run
+                  (refreshed several times a day); earlier days are the measured
+                  record for that day. The chart only shows time when the
+                  satellite is in view - gaps between passes are removed.
                 </li>
               </ul>
               <p class="asi-info-note">
-                Counts are geometric and spectral - they say how many
-                same-band satellites share the station's sky, not the
-                received power of each. Treat a high count as a cue to
-                check the pass, not as a measured carrier-to-interference
-                ratio.
+                Counts are geometric and spectral - they say how many same-band
+                satellites share the station's sky, not the received power of
+                each. Treat a high count as a cue to check the pass, not as a
+                measured carrier-to-interference ratio.
               </p>
             </v-card-text>
             <v-card-actions>
@@ -1407,8 +1425,14 @@ export default {
       const pending = this.pendingHistory
       if (!pending || !this.hasLoadedData) return false
       const start = this.day0StartMs
-      const from = Math.max(0, Math.round((new Date(pending.range.startIso) - start) / 60000))
-      const to = Math.min(this.totalMinutes, Math.round((new Date(pending.range.endIso) - start) / 60000))
+      const from = Math.max(
+        0,
+        Math.round((new Date(pending.range.startIso) - start) / 60000),
+      )
+      const to = Math.min(
+        this.totalMinutes,
+        Math.round((new Date(pending.range.endIso) - start) / 60000),
+      )
       const entries = this.minuteEntries
       for (let i = from; i < to; i++) {
         if (entries[i] && entries[i].covered) return false
@@ -1446,7 +1470,11 @@ export default {
           disabled,
           // Only 'today' and the horizon get a tag; past/forecast is
           // obvious from the position relative to today.
-          kindLabel: disabled ? 'no forecast yet' : kind === 'today' ? 'today' : '',
+          kindLabel: disabled
+            ? 'no forecast yet'
+            : kind === 'today'
+              ? 'today'
+              : '',
         })
       }
       return rows
@@ -1838,7 +1866,9 @@ export default {
     // empty - it keeps its row, with its cells marked clear.
     emptyBands() {
       const result = {}
-      if (!this.hasLoadedData) return result
+      // No verdicts mid-load: a band that simply hasn't arrived yet would
+      // otherwise be hidden as empty and pop back in when it lands.
+      if (!this.hasLoadedData || this.loading) return result
       const legacy = !this.countsCarryNulls
       for (const band of this.bands) {
         let any = false
@@ -2020,7 +2050,9 @@ export default {
       const hoveredBand = this.hoverBand ? this.rowBand(this.hoverBand) : null
       const keys = hoveredBand
         ? this.rowKeys.filter((k) => this.rowBand(k) === hoveredBand)
-        : this.rowKeys.filter((k) => this.rowGs(k) === this.rowGs(this.rowKeys[0]))
+        : this.rowKeys.filter(
+            (k) => this.rowGs(k) === this.rowGs(this.rowKeys[0]),
+          )
       const rows = keys.map((k) => {
         const b = this.rowBand(k)
         const count = this.slotCount(k, slot.start, slot.stop)
@@ -2043,7 +2075,8 @@ export default {
                 : 'Clear',
         }
       })
-      const bandSuffix = this.multiStation && hoveredBand ? ` · ${hoveredBand}` : ''
+      const bandSuffix =
+        this.multiStation && hoveredBand ? ` · ${hoveredBand}` : ''
       const from = this.formatHM(this.idxToDate(slot.start))
       const to =
         slot.stop - slot.start > 1
@@ -2152,7 +2185,11 @@ export default {
     selectedGroundStationIds: {
       handler(ids, old) {
         if (!ids || !ids.length) return
-        if (old && ids.length === old.length && ids.every((v, i) => v === old[i]))
+        if (
+          old &&
+          ids.length === old.length &&
+          ids.every((v, i) => v === old[i])
+        )
           return
         if (this.selectedSatelliteId) this.loadForecast()
       },
@@ -3167,9 +3204,10 @@ export default {
       const failures = []
       try {
         for (const { gs, day } of missing) {
-          this.progressText = stations.length > 1
-            ? `Loading ${gs.name} ${day.date} (${done}/${total})`
-            : `Loading ${day.date} (${done}/${total})`
+          this.progressText =
+            stations.length > 1
+              ? `Loading ${gs.name} ${day.date} (${done}/${total})`
+              : `Loading ${day.date} (${done}/${total})`
           // Small pacing gap between requests - spreads the batch out to
           // reduce the odds of tripping whatever's causing the occasional
           // Net::ReadTimeout blips (likely rate limiting on rapid bursts).
@@ -3189,7 +3227,10 @@ export default {
             }
             this.stationDayData = {
               ...this.stationDayData,
-              [gs.id]: { ...(this.stationDayData[gs.id] || {}), [day.date]: dayData },
+              [gs.id]: {
+                ...(this.stationDayData[gs.id] || {}),
+                [day.date]: dayData,
+              },
             }
           } catch (e) {
             if (gen !== this._forecastGen) return
@@ -4106,6 +4147,29 @@ export default {
 }
 .pass-cell.placeholder {
   border-color: transparent;
+}
+.skeleton-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 .cell-note {
   position: absolute;
