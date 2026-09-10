@@ -755,6 +755,10 @@ const PASS_PAD_MIN = 0
 // Today/forecast day responses go stale (the forecast refreshes, and
 // today's measured portion keeps growing); past days never do.
 const FORECAST_CACHE_TTL_MS = 5 * 60_000
+// Persisted history slices (localStorage): key prefix and how many to keep.
+// A day slice is ~130 KB, so 24 entries stays well inside the usual quota.
+const HISTORY_LS_PREFIX = 'vega_widget_history:'
+const HISTORY_LS_MAX_ENTRIES = 24
 const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const MONTHS = [
   'JAN',
@@ -2629,17 +2633,27 @@ export default {
       const satId = this.selectedSatelliteId
       const gsId = this.selectedGroundStationId
       const cached = {}
-      const missingPast = []
+      let missingPast = []
       const missingForecast = []
       const nowMs = Date.now()
-      for (const day of this.utcFetchDays) {
+      // Measured history is one request for exactly the slice of past UTC
+      // days that falls inside the display window - never a whole day the
+      // window only touches the end of - and, being immutable, is kept
+      // across page loads (see historyCacheGet/Put).
+      const pastDays = this.utcFetchDays.filter((d) => d.past)
+      const range = this.historyRange(pastDays)
+      if (range) {
+        const hit = force === true ? null : this.historyCacheGet(range.key)
+        if (hit) Object.assign(cached, hit)
+        else missingPast = pastDays
+      }
+      for (const day of this.utcFetchDays.filter((d) => !d.past)) {
         const hit = this._dayCache[this.dayCacheKey(satId, gsId, day)]
-        const fresh =
-          hit && (day.past || nowMs - hit.at < FORECAST_CACHE_TTL_MS)
+        const fresh = hit && nowMs - hit.at < FORECAST_CACHE_TTL_MS
         if (force !== true && fresh) {
           cached[day.date] = hit.data
         } else {
-          ;(day.past ? missingPast : missingForecast).push(day)
+          missingForecast.push(day)
         }
       }
       // Cached days render immediately; only the rest are fetched.
@@ -2651,9 +2665,9 @@ export default {
       const failures = []
       try {
         if (missingPast.length) {
-          this.progressText = `Loading history (0/${total})`
+          this.progressText = `Loading history (0/${total}) - Vega can take ~40s`
           try {
-            await this.loadHistory(satId, gsId, gen, missingPast)
+            await this.loadHistory(satId, gsId, gen, missingPast, range)
           } catch (e) {
             failures.push(`history: ${e.message}`)
           }
@@ -2735,16 +2749,77 @@ export default {
     // days render through the identical per-band bar pipeline as the forecast:
     // same severity colours, legend toggles and tooltip. A 404/timeout
     // is non-fatal upstream - the chart just shows forecast only.
+    // The measured-history request for a set of past UTC days: clipped to
+    // the display window on both ends (a display day in a non-UTC zone
+    // starts partway through a UTC day, and the rest of that UTC day is
+    // not on screen), with a cache key that names the exact slice.
+    historyRange(pastDays) {
+      if (!pastDays?.length) return null
+      const windowStart = this.day0StartMs
+      const windowEnd = windowStart + this.totalMinutes * 60000
+      const daysStart = new Date(`${pastDays[0].date}T00:00:00Z`).getTime()
+      const daysEnd = new Date(
+        `${this.dateAfter(pastDays[pastDays.length - 1].date)}T00:00:00Z`,
+      ).getTime()
+      const startIso = new Date(Math.max(daysStart, windowStart)).toISOString()
+      const endIso = new Date(Math.min(daysEnd, windowEnd)).toISOString()
+      return {
+        startIso,
+        endIso,
+        key: `${this.selectedSatelliteId}|${this.selectedGroundStationId}|h|${startIso}|${endIso}`,
+      }
+    },
+    // Immutable history slices live in memory and in localStorage, so a page
+    // refresh (or coming back tomorrow) doesn't pay Vega's 30-45s again.
+    historyCacheGet(key) {
+      const mem = this._dayCache[key]
+      if (mem) return mem.data
+      try {
+        const raw = localStorage.getItem(HISTORY_LS_PREFIX + key)
+        if (!raw) return null
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed.data !== 'object') return null
+        this._dayCache[key] = parsed
+        return parsed.data
+      } catch (e) {
+        return null
+      }
+    },
+    historyCachePut(key, data) {
+      const entry = { at: Date.now(), data }
+      this._dayCache[key] = entry
+      try {
+        // Keep the store bounded: drop the oldest slices past the cap.
+        const mine = Object.keys(localStorage)
+          .filter((k) => k.startsWith(HISTORY_LS_PREFIX))
+          .map((k) => {
+            let at = 0
+            try {
+              at = JSON.parse(localStorage.getItem(k)).at || 0
+            } catch (e) {
+              // unreadable: treat as oldest
+            }
+            return { k, at }
+          })
+          .sort((a, b) => a.at - b.at)
+        while (mine.length >= HISTORY_LS_MAX_ENTRIES) {
+          localStorage.removeItem(mine.shift().k)
+        }
+        localStorage.setItem(HISTORY_LS_PREFIX + key, JSON.stringify(entry))
+      } catch (e) {
+        // quota or private mode: the in-memory copy still serves this session
+      }
+    },
     async loadHistory(
       satelliteId,
       groundStationId,
       gen,
       pastDays,
+      range,
       attempts = 3,
     ) {
-      if (!pastDays?.length) return
-      const startIso = `${pastDays[0].date}T00:00:00Z`
-      const endIso = `${this.dateAfter(pastDays[pastDays.length - 1].date)}T00:00:00Z`
+      if (!pastDays?.length || !range) return
+      const { startIso, endIso } = range
       let lastError
       for (let i = 0; i < attempts; i++) {
         try {
@@ -2790,11 +2865,9 @@ export default {
               toneHighMin: 10,
             }
             merged[day.date] = dayData
-            // Measured history is immutable - cache it for the session.
-            this._dayCache[
-              this.dayCacheKey(satelliteId, groundStationId, day)
-            ] = { at: Date.now(), data: dayData }
           }
+          // Measured history is immutable - keep the whole slice.
+          this.historyCachePut(range.key, merged)
           this.dayDataByDate = { ...this.dayDataByDate, ...merged }
           return
         } catch (e) {
