@@ -502,7 +502,7 @@
                         v-for="(d, step) in bandBars[band]"
                         :key="step"
                         :d="d"
-                        :fill="RAMP_COLORS[step]"
+                        :fill="BAR_COLORS[step]"
                         stroke="none"
                       />
                     </g>
@@ -514,7 +514,7 @@
                         v-for="(d, step) in dragBars[band]"
                         :key="'drag-' + step"
                         :d="d"
-                        :fill="RAMP_COLORS[step]"
+                        :fill="BAR_COLORS[step]"
                         stroke="none"
                       />
                     </template>
@@ -961,6 +961,13 @@ function rampColor(level) {
 const RAMP_COLORS = Array.from({ length: RAMP_STEPS }, (_, i) =>
   rampColor(i / (RAMP_STEPS - 1)),
 )
+// A clear minute (analysed, nothing there) still gets a bar: a stub a
+// couple of pixels tall in a muted green, so the minute is there to hover
+// and the row reads as "observed and clear" rather than "nothing here".
+const CLEAR_STUB_COLOR = 'rgba(67, 160, 71, 0.55)'
+const CLEAR_STUB_H = 0.05 // of CHART_H
+const CLEAR_STEP = RAMP_STEPS // index of the stub path in a row's path list
+const BAR_COLORS = [...RAMP_COLORS, CLEAR_STUB_COLOR]
 // Fraction of each slot a slice fills; the rest is the gap that makes
 // neighbouring slices read as separate bars rather than a filled area.
 const SLICE_FILL = 0.7
@@ -1136,6 +1143,7 @@ export default {
       CHART_H,
       LANE_HEADROOM,
       RAMP_COLORS,
+      BAR_COLORS,
       // COSMOS 'time_zone' setting - see the Time zone block up top.
       timeZone: 'local',
       // Wall clock, ticked every 30s so the "now" line moves.
@@ -1926,7 +1934,12 @@ export default {
       const result = {}
       for (const key of this.rowKeys) {
         const g = this.sliceGeom(key, slot.seg, slot.start, slot.stop)
-        if (g) result[key] = { d: g.d, color: rampColor(g.level) }
+        if (g) {
+          result[key] = {
+            d: g.d,
+            color: g.count > 0 ? rampColor(g.level) : CLEAR_STUB_COLOR,
+          }
+        }
       }
       return result
     },
@@ -2717,9 +2730,9 @@ export default {
     // pass-compressed axis "no slice" already reads as "clean".
     // With a [c0, c1] range (compressed units) only the slots whose centre
     // falls inside it are built - used for the drag-zoom highlight.
-    buildBandBars(band, range = null) {
+    buildBandBars(key, range = null) {
       const slot = this.slotMinutes
-      const d = new Array(RAMP_STEPS).fill('')
+      const d = new Array(RAMP_STEPS + 1).fill('') // ramp steps + clear stubs
       for (const seg of this.segments) {
         for (let idx = seg.startIdx; idx < seg.endIdx; idx += slot) {
           const stop = Math.min(seg.endIdx, idx + slot)
@@ -2727,7 +2740,7 @@ export default {
             const cx = seg.cstart + (idx - seg.startIdx) + (stop - idx) / 2
             if (cx < range[0] || cx > range[1]) continue
           }
-          const g = this.sliceGeom(band, seg, idx, stop)
+          const g = this.sliceGeom(key, seg, idx, stop)
           if (g) d[g.step] += g.d
         }
       }
@@ -2806,10 +2819,11 @@ export default {
     // boundary into the next box.
     sliceGeom(key, seg, start, stop) {
       const count = this.slotCount(key, start, stop)
-      if (!(count > 0)) return null
-      const level = this.levelOf(count, this.rowBand(key))
-      const step = Math.round(level * (RAMP_STEPS - 1))
-      const h = level * CHART_H
+      if (count === null) return null // no reading: nothing to draw
+      const clear = count === 0
+      const level = clear ? 0 : this.levelOf(count, this.rowBand(key))
+      const step = clear ? CLEAR_STEP : Math.round(level * (RAMP_STEPS - 1))
+      const h = clear ? CLEAR_STUB_H * CHART_H : level * CHART_H
       const span = stop - start
       const inset = (span * (1 - SLICE_FILL)) / 2
       const w = (span * SLICE_FILL).toFixed(2)
@@ -4040,7 +4054,7 @@ export default {
 }
 .cell-note {
   position: absolute;
-  inset: 0;
+  inset: 0 0 6px 0;
   display: flex;
   align-items: center;
   justify-content: center;
