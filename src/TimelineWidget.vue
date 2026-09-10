@@ -437,7 +437,7 @@
           <button
             v-if="zoomRange"
             type="button"
-            class="quiet-link"
+            class="quiet-link bordered"
             @click="resetZoom"
           >
             Reset zoom ({{ zoomSpanLabel }})
@@ -1915,7 +1915,11 @@ export default {
     bandBars() {
       const result = {}
       for (const key of this.rowKeys) {
-        result[key] = this.buildBandBars(key)
+        // A band judged 'no data' draws nothing - a row of clear stubs
+        // would read as "observed and clear", which it is not.
+        result[key] = this.emptyBands[this.rowBand(key)]
+          ? []
+          : this.buildBandBars(key)
       }
       return result
     },
@@ -4064,6 +4068,10 @@ export default {
   opacity: 0.55;
   font-size: 11px;
   cursor: pointer;
+}
+.quiet-link.bordered {
+  border: 1px solid rgba(128, 128, 128, 0.45);
+  padding: 4px 10px;
 }
 .quiet-link:hover {
   opacity: 1;
