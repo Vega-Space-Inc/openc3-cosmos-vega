@@ -212,7 +212,9 @@
             </v-select>
             <div v-if="busy" class="ctl-shimmer" />
           </div>
+          <!-- Refresh + settings sit on the row's right edge -->
           <v-btn
+            class="ml-auto"
             color="primary"
             variant="flat"
             style="height: 32px"
@@ -3783,7 +3785,7 @@ export default {
 .controls-col {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 8px;
 }
 .controls-row {
