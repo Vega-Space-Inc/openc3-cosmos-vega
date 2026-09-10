@@ -803,14 +803,17 @@
           </div>
         </div>
 
-        <div class="x-axis-row" :class="{ 'two-line': axisTwoLine }">
+        <div class="x-axis-row" :style="{ height: axisHeightPx + 'px' }">
           <div class="x-axis-spacer" />
           <div class="x-axis">
             <span
               v-for="mark in loading ? [] : axisMarks"
               :key="'mark-' + (mark.align || 'c') + mark.c"
               class="hour-mark"
-              :class="'align-' + (mark.align || 'center')"
+              :class="[
+                'align-' + (mark.align || 'center'),
+                { angled: mark.angled },
+              ]"
               :style="{ left: cToPct(mark.c) + '%' }"
             >
               <div v-for="(line, i) in mark.lines" :key="i">{{ line }}</div>
@@ -1908,16 +1911,20 @@ export default {
         marks.push({ c: vEnd, lines: [endLabel], align: 'end' })
         return marks
       }
-      // Several passes: one label per pass, centred under its box, showing
-      // as much as fits - the full range on one line, the range stacked on
-      // two lines, the start time alone, or nothing (the tooltip still has
-      // it). Labels are then placed left to right and any that would run
-      // into the previous one is shrunk until it fits, or dropped.
+      // Several passes: one label per pass, centred under its box - the
+      // full range on one line, or the range stacked on two lines when the
+      // box is narrower. If every pass can be labelled that way without
+      // touching its neighbour, that's the axis. Otherwise the whole axis
+      // switches to angled labels (all of them, so it reads as one style):
+      // each pass's range runs down-left from its centre at 40 degrees,
+      // which needs only ~22px between passes; a pass closer than that to
+      // the previous labelled one goes unlabelled (the tooltip has it).
       const pxPerUnit = px / span
       const charPx = this.use24h ? 7 : 6.6
       const width = (text) => text.length * charPx
-      const marks = []
+      const upright = []
       let lastRight = -Infinity
+      let allFit = true
       for (const s of segs) {
         const boxPx = s.clen * pxPerUnit
         const cx = s.cstart + s.clen / 2
@@ -1925,23 +1932,34 @@ export default {
         const options = [
           { lines: [`${s.startLabel} – ${s.endLabel}`] },
           { lines: [s.startLabel, s.endLabel] },
-          { lines: [s.startLabel] },
         ]
         let placed = null
         for (const opt of options) {
           const w = Math.max(...opt.lines.map(width))
-          // must fit its own box (plus a little air) and clear the last label
           if (w > boxPx + 10) continue
           if (cpx - w / 2 < lastRight + 8) continue
           placed = { c: cx, lines: opt.lines, align: 'center', w }
           break
         }
-        if (placed) {
-          marks.push(placed)
-          lastRight = cpx + placed.w / 2
+        if (!placed) {
+          allFit = false
+          break
         }
+        upright.push(placed)
+        lastRight = cpx + placed.w / 2
       }
-      return marks
+      if (allFit) return upright
+      const angled = []
+      let lastAnchor = -Infinity
+      for (const s of segs) {
+        const cx = s.cstart + s.clen / 2
+        const cpx = (cx - vStart) * pxPerUnit
+        if (cpx < lastAnchor + 22) continue
+        const text = `${s.startLabel} – ${s.endLabel}`
+        angled.push({ c: cx, lines: [text], angled: true, w: width(text) })
+        lastAnchor = cpx
+      }
+      return angled
     },
     // Each lane is scaled to ITS OWN band's peak, not a shared maximum -
     // severity is relative to the band (5 interferers on VHF can matter more
@@ -2034,8 +2052,15 @@ export default {
       }
       return result
     },
-    axisTwoLine() {
-      return this.axisMarks.some((m) => m.lines && m.lines.length > 1)
+    // Height of the axis strip: one line, two lines, or the drop of the
+    // angled labels (their length projected at 40 degrees).
+    axisHeightPx() {
+      const marks = this.axisMarks
+      if (marks.some((m) => m.angled)) {
+        const longest = Math.max(0, ...marks.map((m) => m.w || 0))
+        return Math.ceil(longest * Math.sin((40 * Math.PI) / 180) + 18)
+      }
+      return marks.some((m) => m.lines && m.lines.length > 1) ? 30 : 16
     },
     // The drag-zoom selection in compressed units, or null when not
     // dragging (or the drag is still narrower than a click).
@@ -4658,8 +4683,12 @@ export default {
   height: 16px;
   margin-top: 14px;
 }
-.x-axis-row.two-line {
-  height: 30px;
+/* Angled label: its right end pinned at the pass centre, running down and
+   to the left at 40 degrees */
+.hour-mark.angled {
+  transform: translateX(-100%) rotate(-40deg);
+  transform-origin: 100% 0;
+  text-align: right;
 }
 .x-axis-spacer {
   width: var(--label-w, 48px); /* .lanes-labels */
