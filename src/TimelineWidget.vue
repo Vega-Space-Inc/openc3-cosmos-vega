@@ -4234,7 +4234,18 @@ export default {
   flex: 1;
   min-width: 0;
   cursor: crosshair;
-  overflow: hidden;
+  /* Clip the zoomed-out boxes at the sides, but let the last row's
+     bottom outline (which lands on the very last pixel) paint: the plot
+     itself gets 2px of room below the rows and clips 2px past its box. */
+  overflow: clip;
+  overflow-clip-margin: 2px;
+  padding-bottom: 2px;
+}
+/* The bars sit below the cell outlines, whatever the browser's default
+   ordering of positioned siblings */
+.lanes-stack {
+  position: relative;
+  z-index: 1;
 }
 .lane-plot {
   position: relative;
@@ -4253,7 +4264,7 @@ export default {
   box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.3);
   border-radius: 3px;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
   transition: height 0.15s ease;
 }
 .pass-cell.active {
