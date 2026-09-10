@@ -4031,10 +4031,11 @@ export default {
 }
 .band-group-bg {
   position: absolute;
-  left: 0;
-  right: 0;
+  /* Full bleed: out through the widget's 8px padding to its edges, so the
+     strip runs edge to edge rather than stopping at the labels */
+  left: -8px;
+  right: -8px;
   z-index: 0;
-  border-radius: 4px;
   background: rgba(255, 255, 255, 0.04);
   pointer-events: none;
 }
