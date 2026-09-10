@@ -3692,7 +3692,9 @@ export default {
 }
 .pass-row {
   display: flex;
-  height: 18px;
+  /* Label sits at the top; the rest is the gap to the grid, matched to the
+     gap between the band labels and their cells */
+  height: 30px;
 }
 .pass-track {
   position: relative;
