@@ -515,7 +515,10 @@
             <span
               v-if="hoverSlot && hasLoadedData"
               class="hover-time"
-              :style="{ left: cToPct(hoverSlot.cx) + '%' }"
+              :class="{ now: hoverOnNow }"
+              :style="{
+                left: cToPct(hoverOnNow ? nowMarkerC : hoverSlot.cx) + '%',
+              }"
               >{{ hoverTimeLabel }}</span
             >
           </div>
@@ -777,6 +780,7 @@
                 nowMarkerC < viewEnd
               "
               class="now-line"
+              :class="{ hot: hoverOnNow }"
               :style="{ left: cToPct(nowMarkerC) + '%' }"
             />
             <div
@@ -785,7 +789,7 @@
               :style="dragSelectionStyle"
             />
             <div
-              v-if="hoverSlot && hasLoadedData"
+              v-if="hoverSlot && hasLoadedData && !hoverOnNow"
               class="hover-line"
               :style="{ left: cToPct(hoverSlot.cx) + '%' }"
             />
@@ -2362,9 +2366,19 @@ export default {
       if (!span) return null
       return { band, spanId: span.id, style: this.spanStyle(span) }
     },
+    // True while the cursor is on the 'now' line (within a few px).
+    hoverOnNow() {
+      const slot = this.hoverSlot
+      const c = this.nowMarkerC
+      if (!slot || c === null) return false
+      const pxPerUnit =
+        (this.laneWidthPx || 1200) / Math.max(1, this.viewEnd - this.viewStart)
+      return Math.abs(slot.cx - c) * pxPerUnit <= 5
+    },
     hoverTimeLabel() {
       const slot = this.hoverSlot
       if (!slot) return ''
+      if (this.hoverOnNow) return `Now · ${this.formatHM(new Date(this.nowMs))}`
       const from = this.formatHM(this.idxToDate(slot.start))
       if (slot.stop - slot.start <= 1) return from
       return `${from} – ${this.formatHM(this.idxToDate(slot.stop - 1))}`
@@ -3512,9 +3526,19 @@ export default {
         )
           return
 
-        const firstAvailable = this.forecastAvailableBySatId
-          ? this.satellites.find((s) => this.forecastAvailableBySatId[s.id])
-          : null
+        // Default satellite: the ISS if the org has it (the most recognisable
+        // pass-based picture), else the first LEO, else the first satellite
+        // with a forecast - a GEO's flat all-day line is a poor first look.
+        const available = this.forecastAvailableBySatId
+          ? this.satellites.filter((s) => this.forecastAvailableBySatId[s.id])
+          : []
+        const isLeo = (s) =>
+          String(s.orbital_class || s.orbit || '').toUpperCase() === 'LEO'
+        const firstAvailable =
+          available.find((s) => /\bISS\b/i.test(s.name || '')) ||
+          available.find(isLeo) ||
+          available[0] ||
+          null
         if (firstAvailable) {
           this.selectedSatelliteId = firstAvailable.id
         } else if (this.satellites.length > 0) {
@@ -5000,6 +5024,13 @@ export default {
   pointer-events: none;
 }
 /* Divider between measured history (left) and forecast (right) */
+.now-line.hot {
+  border-left-style: solid;
+  border-left-color: rgba(255, 255, 255, 0.9);
+}
+.hover-time.now {
+  color: #fff;
+}
 .now-line {
   position: absolute;
   top: 2px;
