@@ -2864,11 +2864,28 @@ export default {
   methods: {
     // ---- onboarding tour
     tourTargetRect(id) {
-      const el = this.$el && this.$el.querySelector(`[data-tour="${id}"]`)
-      if (!el) return null
-      const r = el.getBoundingClientRect()
-      if (!r.width || !r.height) return null
-      return { top: r.top, left: r.left, width: r.width, height: r.height }
+      if (!this.$el) return null
+      // The bands step frames just the band blocks (their union), not the
+      // whole label column with its empty space beside them.
+      const els =
+        id === 'bands'
+          ? Array.from(this.$el.querySelectorAll('.band-block'))
+          : [this.$el.querySelector(`[data-tour="${id}"]`)].filter(Boolean)
+      if (!els.length) return null
+      let top = Infinity
+      let left = Infinity
+      let right = -Infinity
+      let bottom = -Infinity
+      for (const el of els) {
+        const r = el.getBoundingClientRect()
+        if (!r.width || !r.height) continue
+        top = Math.min(top, r.top)
+        left = Math.min(left, r.left)
+        right = Math.max(right, r.right)
+        bottom = Math.max(bottom, r.bottom)
+      }
+      if (!Number.isFinite(top)) return null
+      return { top, left, width: right - left, height: bottom - top }
     },
     startTour(force = false) {
       if (!force && (this.tourDone || this.tourActive)) return
@@ -4755,7 +4772,7 @@ export default {
   white-space: nowrap;
 }
 .tour-text {
-  padding-top: 0 !important;
+  padding-top: 10px !important;
 }
 .build-stamp {
   font-size: 11px;
