@@ -1171,6 +1171,32 @@
 
 <script>
 import { Cable, OpenC3Api } from '@openc3/js-common/services'
+import { zoneParts, zoneOffsetMin, zoneMidnightMs, pad2 } from './lib/time'
+import {
+  RAMP_STEPS,
+  RAMP_STOPS,
+  rampColor,
+  RAMP_COLORS,
+  CLEAR_STUB_COLOR,
+  CLEAR_STUB_H,
+  CLEAR_STEP,
+  BAR_COLORS,
+} from './lib/colors'
+import {
+  normalizeBandKeys,
+  BAND_COLORS,
+  bandColor,
+  bandTint,
+} from './lib/bands'
+import {
+  API_KEY_LS_KEY,
+  SIZE_LS_KEY,
+  TIME_24H_LS_KEY,
+  TOUR_LS_KEY,
+  readStoredFlag,
+  readStoredSize,
+  readStoredApiKey,
+} from './lib/storage'
 // Deliberately no import of the COSMOS vue-common Widget mixin: it pulls
 // ~2 MB of the COSMOS shell (which already loads it) into this bundle, and the
 // only things this widget used from it were the props declared below and
@@ -1236,108 +1262,6 @@ const CHART_H = 220
 // so a band at its peak never runs into the lane above it.
 const LANE_HEADROOM = 0.14
 
-// --- Time zone ---
-// The chart follows the COSMOS 'time_zone' setting (Admin / Settings), the
-// same one the top-bar clock uses: 'local' (the browser's zone), 'UTC', or
-// an IANA zone name. Days are that zone's calendar days (midnight to
-// midnight there), and every label is rendered in it. Vega's API is queried
-// by UTC date, so a display day is stitched from the one or two UTC days
-// that overlap it (see utcFetchDays).
-const partsFormatters = {}
-function zoneParts(ms, tz) {
-  const key = tz || 'local'
-  let fmt = partsFormatters[key]
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat('en-US', {
-      timeZone: key === 'local' ? undefined : key,
-      hourCycle: 'h23',
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-      weekday: 'short',
-    })
-    partsFormatters[key] = fmt
-  }
-  const p = {}
-  for (const part of fmt.formatToParts(new Date(ms))) p[part.type] = part.value
-  return {
-    y: Number(p.year),
-    m: Number(p.month) - 1,
-    d: Number(p.day),
-    hh: Number(p.hour) % 24,
-    mm: Number(p.minute),
-    wd: String(p.weekday).slice(0, 3).toUpperCase(),
-  }
-}
-// Minutes the zone is ahead of UTC at the given instant.
-function zoneOffsetMin(ms, tz) {
-  const p = zoneParts(ms, tz)
-  return (
-    (Date.UTC(p.y, p.m, p.d, p.hh, p.mm) - Math.floor(ms / 60000) * 60000) /
-    60000
-  )
-}
-// Epoch ms of midnight on the zone's calendar day (y, m, d). Two passes so
-// a DST change between the guess and the answer is absorbed.
-function zoneMidnightMs(y, m, d, tz) {
-  const guess = Date.UTC(y, m, d)
-  const first = guess - zoneOffsetMin(guess, tz) * 60000
-  return guess - zoneOffsetMin(first, tz) * 60000
-}
-// History points once keyed counts by the raw FrequencyBand name
-// ("S-band"); day_detail and current history use the chart label ("S").
-// Accept both.
-function normalizeBandKeys(counts) {
-  const out = {}
-  for (const [k, v] of Object.entries(counts)) {
-    let label = String(k)
-      .replace(/[-_ ]?band$/i, '')
-      .replace(/_/g, ' ')
-      .toUpperCase()
-    label = { KU: 'Ku', KA: 'Ka', MMWAVE: 'mmWave' }[label] || label
-    out[label] = v
-  }
-  return out
-}
-function pad2(n) {
-  return String(n).padStart(2, '0')
-}
-// Colour ramp. Each slice is coloured by its interferer count RELATIVE to
-// the band's own peak in the loaded window - green (quiet) through amber to
-// red (the band's worst minute) - the same continuous low -> high strip the
-// Vega app draws. Relative, not the API's absolute tone thresholds: with
-// real traffic every minute clears "high >= 10", which paints the whole day
-// one colour and says nothing. The ramp is quantised to RAMP_STEPS colours
-// so a lane is at most RAMP_STEPS <path> elements no matter how many
-// minutes it holds. Level is also encoded by slice height and spelled out
-// in the tooltip, so hue is never the only cue.
-const RAMP_STEPS = 16
-const RAMP_STOPS = [
-  [0x43, 0xa0, 0x47], // green
-  [0xff, 0xb3, 0x00], // amber
-  [0xe5, 0x39, 0x35], // red
-]
-function rampColor(level) {
-  const t = Math.min(1, Math.max(0, level)) * (RAMP_STOPS.length - 1)
-  const i = Math.min(RAMP_STOPS.length - 2, Math.floor(t))
-  const f = t - i
-  const rgb = RAMP_STOPS[i].map((a, k) =>
-    Math.round(a + (RAMP_STOPS[i + 1][k] - a) * f),
-  )
-  return `rgb(${rgb.join(',')})`
-}
-const RAMP_COLORS = Array.from({ length: RAMP_STEPS }, (_, i) =>
-  rampColor(i / (RAMP_STEPS - 1)),
-)
-// A clear minute (analysed, nothing there) still gets a bar: a stub a
-// couple of pixels tall in a muted green, so the minute is there to hover
-// and the row reads as "observed and clear" rather than "nothing here".
-const CLEAR_STUB_COLOR = 'rgba(67, 160, 71, 0.55)'
-const CLEAR_STUB_H = 0.05 // of CHART_H
-const CLEAR_STEP = RAMP_STEPS // index of the stub path in a row's path list
-const BAR_COLORS = [...RAMP_COLORS, CLEAR_STUB_COLOR]
 // Fraction of each slot a slice fills; the rest is the gap that makes
 // neighbouring slices read as separate bars rather than a filled area.
 const SLICE_FILL = 0.7
@@ -1408,10 +1332,7 @@ const VEGA_APP_URL = 'https://app.vega.space'
 // The user's own Vega API key is kept in this browser only. It is never
 // written to a COSMOS setting (get_setting needs no more than viewer rights,
 // so that would expose it to every user) - see authOverride().
-const API_KEY_LS_KEY = 'vega_widget_api_key'
-const SIZE_LS_KEY = 'vega_widget_size'
 // Onboarding tour - shown once per browser, replayable from the menu.
-const TOUR_LS_KEY = 'vega_widget_tour_complete'
 const TOUR_STEPS = [
   {
     id: 'bands',
@@ -1438,70 +1359,13 @@ const TOUR_CARD_W = 320
 const TOUR_PAD = 6
 const TOUR_GAP = 20
 const TOUR_MARGIN = 16
-const TIME_24H_LS_KEY = 'vega_widget_24h'
-function readStoredFlag(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw === null ? fallback : raw === '1'
-  } catch (e) {
-    return fallback
-  }
-}
-function readStoredSize() {
-  try {
-    const raw = localStorage.getItem(SIZE_LS_KEY)
-    if (!raw) return null
-    const { w } = JSON.parse(raw)
-    return Number.isFinite(w) && w > 0 ? { w } : null
-  } catch (e) {
-    return null
-  }
-}
 // Width of the bottom-right corner that counts as the resize grip.
 const GRIP_PX = 20
-// Identity colour per band - for the band block and the tinted strip
-// behind its rows, never for the bars (those keep the severity ramp).
-// Hues stay clear of the ramp's green / amber / red.
-const BAND_COLORS = {
-  VHF: '#7e57c2',
-  UHF: '#42a5f5',
-  L: '#26a69a',
-  S: '#ec407a',
-  C: '#5c6bc0',
-  X: '#29b6f6',
-  Ku: '#ab47bc',
-  Ka: '#78909c',
-  mmWave: '#8d6e63',
-}
-function bandColor(band) {
-  if (BAND_COLORS[band]) return BAND_COLORS[band]
-  // Unknown band: a stable hue from its name
-  let h = 0
-  for (const ch of String(band)) h = (h * 31 + ch.charCodeAt(0)) % 360
-  return `hsl(${h}, 55%, 60%)`
-}
-function bandTint(band, alpha) {
-  const c = bandColor(band)
-  if (c.startsWith('#')) {
-    const r = parseInt(c.slice(1, 3), 16)
-    const g = parseInt(c.slice(3, 5), 16)
-    const b = parseInt(c.slice(5, 7), 16)
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`
-  }
-  return c.replace('hsl(', 'hsla(').replace(')', `, ${alpha})`)
-}
 // With several ground stations selected every band gets one row per
 // station; rows of one band sit LANE_GAP_PX apart and bands GROUP_GAP_PX.
 // Bands are far enough apart that, with each band's strip padded 8px above
 // and below its rows, 8px of plain background still shows between strips.
 const GROUP_GAP_PX = 24
-function readStoredApiKey() {
-  try {
-    return localStorage.getItem(API_KEY_LS_KEY) || null
-  } catch (e) {
-    return null // storage blocked (private mode etc.) - key lasts this page only
-  }
-}
 // Org workspace pages use /organizations/external/{slug}-{id}/configuration/...
 // - the slug is cosmetic (the route also accepts a bare numeric id with no
 // slug prefix), so we skip generating one and just use the id.
