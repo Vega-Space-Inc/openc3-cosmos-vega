@@ -110,11 +110,6 @@ endpoints (`forecasting/heatmap_slice`, `forecasting/track`,
   in a loop and does something more dynamic, or
 - build a custom Vue tool that calls the COSMOS API directly
 
-## Getting Started
-
-1. Edit the .gemspec file fields: name, summary, description, authors, email, and homepage
-1. Update the LICENSE.md file with your company name
-
 ## Building non-tool / widget plugins
 
 1. <Path to COSMOS installation>/openc3.sh cli rake build VERSION=X.Y.Z (or openc3.bat for Windows)
@@ -154,19 +149,10 @@ docker run -it -v %cd%:/openc3/local -w /openc3/local docker.io/openc3inc/openc3
 
 ## Contributing
 
-We encourage you to contribute to OpenC3!
-
-Contributing is easy.
-
-1. Fork the project
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-Before any contributions can be incorporated we do require all contributors to agree to a Contributor License Agreement
-
-This protects both you and us and you retain full rights to any code you write.
+Issues and pull requests are welcome at
+https://github.com/Vega-Space-Inc/openc3-cosmos-vega. For anything else,
+email tom@vega.space.
 
 ## License
 
-This OpenC3 plugin is released under the MIT License. See [LICENSE.md](LICENSE.md)
+MIT. See [LICENSE.md](LICENSE.md). Copyright 2026 Vega Space, Inc.
