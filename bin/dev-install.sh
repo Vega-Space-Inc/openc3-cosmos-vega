@@ -4,7 +4,7 @@
 # mounts /gems read-only, and a plain `docker exec` runs as a user that does
 # not own /gems/cosmoscache (EACCES). This is what Admin > Plugins does.
 #
-#   bin/dev-install.sh            # version 0.47.0.<timestamp>, upgrades in place
+#   bin/dev-install.sh            # version 0.48.0.<timestamp>, upgrades in place
 #   bin/dev-install.sh 0.48.0     # explicit version (use for a real release)
 #
 # Then hard-refresh the browser (Cmd+Shift+R) - the widget JS is cached.
@@ -14,7 +14,7 @@
 # an installed openc3-cosmos-vega and upgrades it, keeping vars.json's values.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VERSION="${1:-0.47.0.$(date +%Y%m%d%H%M%S)}"
+VERSION="${1:-0.48.0.$(date +%Y%m%d%H%M%S)}"
 API="${OPENC3_API_CONTAINER:-cosmos-openc3-cosmos-cmd-tlm-api-1}"
 OWNER="$(docker exec "$API" stat -c %u:%g /gems/cosmoscache)"
 GEM="openc3-cosmos-vega-$VERSION.gem"
