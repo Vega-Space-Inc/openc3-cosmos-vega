@@ -11,7 +11,7 @@
 # (e.g. one packet per record, or a custom Vue tool) once you know which
 # fields you actually want to watch.
 
-TELEMETRY VEGA HEALTH BIG_ENDIAN "Vega API health check (no auth required)"
+TELEMETRY <%= target_name %> HEALTH BIG_ENDIAN "Vega API health check (no auth required)"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code"
   APPEND_ITEM STATUS 256 STRING "Health status string, expect 'healthy'"
@@ -28,12 +28,12 @@ TELEMETRY VEGA HEALTH BIG_ENDIAN "Vega API health check (no auth required)"
 # JSON: Vega returns an HTML error page for some responses, so it is exposed
 # raw via BinaryAccessor as a variable-length string (BODY 0 STRING = the rest
 # of the buffer). HTTP_STATUS tells you which kind of error it was.
-TELEMETRY VEGA ERROR_RESPONSE BIG_ENDIAN "Non-2xx response from any Vega endpoint (bad/expired key, no approved org access, rate limit, not found, server error). Raw body, see HTTP_STATUS for the code."
+TELEMETRY <%= target_name %> ERROR_RESPONSE BIG_ENDIAN "Non-2xx response from any Vega endpoint (bad/expired key, no approved org access, rate limit, not found, server error). Raw body, see HTTP_STATUS for the code."
   ACCESSOR HttpAccessor BinaryAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, e.g. 401 = bad/expired VEGA_API_KEY secret, 403 = no approved access to vega_org_id, 404 = unknown org / no data in range, 429 = rate limited, 5xx = Vega server error"
   APPEND_ITEM BODY 0 STRING "Raw response body (HTML or JSON, unparsed)"
 
-TELEMETRY VEGA DEMO_KEY BIG_ENDIAN "Vega's public demo API key: read-only access to the Demo Org, served by Vega so it can be rotated without a plugin release. Nothing secret - it is what any visitor gets."
+TELEMETRY <%= target_name %> DEMO_KEY BIG_ENDIAN "Vega's public demo API key: read-only access to the Demo Org, served by Vega so it can be rotated without a plugin release. Nothing secret - it is what any visitor gets."
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 404 means no demo key is on offer"
   APPEND_ITEM API_KEY 512 STRING "The demo frontend API key (vgk_...)"
@@ -43,7 +43,7 @@ TELEMETRY VEGA DEMO_KEY BIG_ENDIAN "Vega's public demo API key: read-only access
   APPEND_ITEM ORG_NAME 256 STRING "Demo organization name"
     KEY $.data.organization_name
 
-TELEMETRY VEGA APPROVED_ORGS BIG_ENDIAN "Organizations this API key's user has approved access to - use these ids for vega_org_id"
+TELEMETRY <%= target_name %> APPROVED_ORGS BIG_ENDIAN "Organizations this API key's user has approved access to - use these ids for vega_org_id"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 401 means the key is bad/expired"
   APPEND_ITEM FIRST_ORG_ID 32 UINT "Org ID of the first approved organization"
@@ -57,7 +57,7 @@ TELEMETRY VEGA APPROVED_ORGS BIG_ENDIAN "Organizations this API key's user has a
   APPEND_ITEM ORGANIZATIONS_JSON 0 ARRAY "Full organizations array (id, name, satellites_count, access_level, etc) - used by the ForecastTimeline widget's Organization picker"
     KEY $.data.organizations
 
-TELEMETRY VEGA WORKSPACE BIG_ENDIAN "Satellites and ground stations for the requested org - first-record snapshot"
+TELEMETRY <%= target_name %> WORKSPACE BIG_ENDIAN "Satellites and ground stations for the requested org - first-record snapshot"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
   APPEND_ITEM ORG_ID 32 UINT "Organization id echoed back - lets a caller confirm this response is for the org it asked about (e.g. via an HTTP_PATH override), since periodic polls to the default vega_org_id keep updating this same packet in the background"
@@ -85,7 +85,7 @@ TELEMETRY VEGA WORKSPACE BIG_ENDIAN "Satellites and ground stations for the requ
   APPEND_ITEM GROUND_STATIONS_JSON 0 ARRAY "Full ground_stations array (id, name, location, lat, lng, etc) - used by the ForecastTimeline widget to populate its ground station rows"
     KEY $.data.ground_stations
 
-TELEMETRY VEGA FORECASTING_SUMMARY BIG_ENDIAN "Interference/coverage forecast summary for the requested org - forecast run status plus the first satellite's most recent day"
+TELEMETRY <%= target_name %> FORECASTING_SUMMARY BIG_ENDIAN "Interference/coverage forecast summary for the requested org - forecast run status plus the first satellite's most recent day"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
   APPEND_ITEM ORG_ID 32 UINT "Organization id echoed back - lets a caller confirm this response is for the org it asked about (e.g. via an HTTP_PATH override), since periodic polls to the default vega_org_id keep updating this same packet in the background"
@@ -120,7 +120,7 @@ TELEMETRY VEGA FORECASTING_SUMMARY BIG_ENDIAN "Interference/coverage forecast su
 # interference data (actual start/end times, not day-level aggregates) that
 # the ForecastTimeline widget renders as colored bar segments, matching the
 # same data the Vega web app itself uses for this view.
-TELEMETRY VEGA DAY_DETAIL BIG_ENDIAN "Interference windows for one satellite+ground_station+day"
+TELEMETRY <%= target_name %> DAY_DETAIL BIG_ENDIAN "Interference windows for one satellite+ground_station+day"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
   APPEND_ITEM SATELLITE_ID 32 UINT "Satellite id echoed back"
@@ -144,7 +144,7 @@ TELEMETRY VEGA DAY_DETAIL BIG_ENDIAN "Interference windows for one satellite+gro
   APPEND_ITEM MINUTES_JSON 0 ARRAY "Array of {timestamp, minute, covered, counts: {band: count|null, ...}} - one entry per minute this day. A count of null means the run never aggregated that band (no reading); 0 means analysed and clear. The ForecastTimeline widget derives per-band interference segments from this (not from INTERFERENCE_WINDOWS_JSON, which is a day-level aggregate across all bands)."
     KEY $.data.minutes
 
-TELEMETRY VEGA HISTORY BIG_ENDIAN "Measured historical interference for one satellite+ground_station over a time range"
+TELEMETRY <%= target_name %> HISTORY BIG_ENDIAN "Measured historical interference for one satellite+ground_station over a time range"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org, 404 means no coverage runs overlap the requested range"
   APPEND_ITEM SATELLITE_ID 32 UINT "Satellite id echoed back"

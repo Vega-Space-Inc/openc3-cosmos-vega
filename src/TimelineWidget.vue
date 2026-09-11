@@ -1203,8 +1203,9 @@ export default {
   // we don't declare from landing on the root element as attributes.
   inheritAttrs: false,
   props: {
-    // TARGET/PACKET etc. from the screen definition line (unused here - the
-    // widget always talks to the VEGA target)
+    // From the screen definition line: TIMELINE <TARGET>. The target name
+    // defaults to VEGA; pass it when the plugin was installed with a
+    // different vega_target_name (see targetName below).
     parameters: {
       type: Array,
       default: () => [],
@@ -1345,6 +1346,12 @@ export default {
     }
   },
   computed: {
+    // The COSMOS target this widget commands and reads. First screen
+    // parameter, else VEGA - the plugin's default vega_target_name.
+    targetName() {
+      const p = this.parameters && this.parameters[0]
+      return p ? String(p).toUpperCase() : 'VEGA'
+    },
     orgOptions() {
       return this.organizations.map((o) => ({
         id: o.id,
@@ -2737,7 +2744,7 @@ export default {
         const errStamp = stampOf(before[ERROR_PACKET])
         try {
           await this.api.cmd(
-            'VEGA',
+            this.targetName,
             'GET_APPROVED_ORGS',
             this.authOverride(),
             CMD_OPTS,
@@ -3963,14 +3970,14 @@ export default {
       }
       throw lastError
     },
-    // Polls get_all_interface_info for VEGA_INT's state, returning as soon as
+    // Polls get_all_interface_info for the target's interface state, returning as soon as
     // it's CONNECTED (or immediately if it already is).
     async waitForInterfaceConnected(timeoutMs) {
       const deadline = Date.now() + timeoutMs
       while (Date.now() < deadline) {
         try {
           const info = await this.api.get_all_interface_info()
-          const row = info.find((r) => r[0] === 'VEGA_INT')
+          const row = info.find((r) => r[0] === `${this.targetName}_INT`)
           if (row && row[1] === 'CONNECTED') return
         } catch (e) {
           // ignore transient errors checking status, just keep polling
@@ -3988,7 +3995,10 @@ export default {
         for (const item of items) keys.push([packet, item])
       }
       const rows = await this.api.get_tlm_values(
-        keys.map(([packet, item]) => `VEGA__${packet}__${item}__CONVERTED`),
+        keys.map(
+          ([packet, item]) =>
+            `${this.targetName}__${packet}__${item}__CONVERTED`,
+        ),
       )
       const out = {}
       keys.forEach(([packet, item], i) => {
@@ -4045,7 +4055,7 @@ export default {
       const errStamp = stampOf(before[ERROR_PACKET])
       try {
         await this.api.cmd(
-          'VEGA',
+          this.targetName,
           command,
           { ...this.authOverride(), ...params },
           CMD_OPTS,

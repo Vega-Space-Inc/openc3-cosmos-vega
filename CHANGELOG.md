@@ -5,6 +5,15 @@
 ### Widget
 - Roomier grid: station rows 40px (52px single-station), 10px between a
   band's rows, 32px between bands, 14px between pass boxes.
+- Takes the target name as its screen parameter (`TIMELINE <%= target_name %>`),
+  defaulting to VEGA.
+
+### Plugin
+- New `vega_target_name` variable (default VEGA): the target, interface and
+  polled commands are templated on it, so the plugin can be installed more
+  than once, e.g. one target per organization.
+- README: store image, plugin variables table, command and telemetry lists.
+- LICENSE.md names Vega Space, Inc.; OpenC3 template text dropped from the README.
 
 ## 0.48.0 - 2026-09-10
 

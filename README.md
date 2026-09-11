@@ -1,5 +1,9 @@
 # OpenC3 COSMOS Vega Plugin
 
+<p align="center">
+  <img src="public/store_img.png" alt="Vega Space" width="480">
+</p>
+
 Polls the Vega Space frontend API (`/api/v1/frontend/*` on
 `admin.vega.space`) and surfaces satellite interference/coverage data as
 COSMOS telemetry:
@@ -44,6 +48,35 @@ Decommutated command and telemetry records are retained for 30 days
 `WORKSPACE` and `FORECASTING_SUMMARY` carry whole JSON arrays on every poll,
 so unbounded retention grows fast. Raise it in `plugin.txt` if you need more
 history.
+
+## Plugin variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `vega_target_name` | `VEGA` | Target name. Change it to install the plugin more than once, e.g. one target per organization. Pass it to the widget: `TIMELINE <%= target_name %>` |
+| `vega_hostname` | `admin.vega.space` | Vega API hostname |
+| `vega_port` | `443` | Vega API port |
+| `vega_protocol` | `https` | `http` or `https` |
+| `vega_org_id` | `0` | Organization to poll workspace and forecast data for; `0` disables the org-scoped polls. Find ids in `APPROVED_ORGS` |
+| `vega_poll_period` | `120` | Seconds between `GET_HEALTH` / `GET_FORECASTING_SUMMARY` polls; `0` disables |
+| `vega_slow_poll_period` | `3600` | Seconds between `GET_APPROVED_ORGS` / `GET_WORKSPACE` polls; `0` disables |
+| `vega_read_timeout` | `90.0` | Seconds to wait for an API response |
+| `vega_connect_timeout` | `10.0` | Seconds to wait for the connection |
+
+## Commands
+
+- **GET_HEALTH** - API reachability, no key needed
+- **GET_DEMO_KEY** - Vega's public read-only demo key, so a fresh install shows data
+- **GET_APPROVED_ORGS** - organizations this key's user may read
+- **GET_WORKSPACE** - satellites and ground stations for `vega_org_id`
+- **GET_FORECASTING_SUMMARY** - forecast run status and the first satellite's latest day
+- **GET_DAY_DETAIL** - one satellite, ground station and day of interference minutes (widget-driven)
+- **GET_HISTORY** - measured interference over a time range (widget-driven)
+
+## Telemetry
+
+- **HEALTH**, **DEMO_KEY**, **APPROVED_ORGS**, **WORKSPACE**, **FORECASTING_SUMMARY**, **DAY_DETAIL**, **HISTORY** - one packet per command, JSON fields decoded by `KEY` path
+- **ERROR_RESPONSE** - `HTTP_STATUS` and the raw body of any non-2xx reply, from any command
 
 ## Setup
 
@@ -104,8 +137,8 @@ endpoints (`forecasting/heatmap_slice`, `forecasting/track`,
 `forecasting/satellite_position`) - either:
 
 - add more `GET_*` commands / `KEY $.data.foo[N]...` items for specific
-  indices or orgs you care about (duplicate the target with a different
-  `vega_org_id` for multi-org polling), or
+  indices or orgs you care about (install the plugin again with a
+  different `vega_target_name` and `vega_org_id` for multi-org polling), or
 - write a small script (`targets/VEGA/procedures/`) that calls `cmd`/`tlm`
   in a loop and does something more dynamic, or
 - build a custom Vue tool that calls the COSMOS API directly

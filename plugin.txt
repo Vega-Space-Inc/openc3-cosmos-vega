@@ -1,6 +1,8 @@
 # LANGUAGE ruby
 # Set VARIABLEs here to allow variation in your plugin
 
+VARIABLE vega_target_name VEGA
+  VARIABLE_DESCRIPTION "Target name (rename to install the plugin more than once, e.g. one target per organization)"
 VARIABLE vega_hostname admin.vega.space
   VARIABLE_DESCRIPTION "Hostname of the Vega API"
 VARIABLE vega_port 443
@@ -18,7 +20,7 @@ VARIABLE vega_read_timeout 90.0
 VARIABLE vega_connect_timeout 10.0
   VARIABLE_DESCRIPTION "Seconds to wait for the connection to be established"
 
-TARGET VEGA VEGA
+TARGET VEGA <%= vega_target_name %>
   # WORKSPACE and FORECASTING_SUMMARY carry whole JSON arrays (every satellite and
   # ground station) on every poll, so unbounded decom retention grows fast.
   CMD_DECOM_RETAIN_TIME 30d
@@ -27,8 +29,8 @@ TARGET VEGA VEGA
 # VegaHttpClientInterface = COSMOS's HttpClientInterface plus recovery from an
 # in-process disconnect (see targets/VEGA/lib/vega_http_client_interface.rb).
 # Args: hostname port protocol write_timeout read_timeout connect_timeout
-INTERFACE VEGA_INT vega_http_client_interface.rb <%= vega_hostname %> <%= vega_port %> <%= vega_protocol %> 5.0 <%= vega_read_timeout %> <%= vega_connect_timeout %>
-  MAP_TARGET VEGA
+INTERFACE <%= vega_target_name %>_INT vega_http_client_interface.rb <%= vega_hostname %> <%= vega_port %> <%= vega_protocol %> 5.0 <%= vega_read_timeout %> <%= vega_connect_timeout %>
+  MAP_TARGET <%= vega_target_name %>
   # Auth: users normally enter their own Vega API key on the dashboard (the
   # Timeline widget sends it per request, obfuscated). SECRET is the optional
   # fallback for the background polls: the Admin / Secrets entry VEGA_API_KEY is
@@ -39,22 +41,22 @@ INTERFACE VEGA_INT vega_http_client_interface.rb <%= vega_hostname %> <%= vega_p
   SECRET ENV VEGA_API_KEY VEGA_API_KEY
   # CONNECT_CMD populates the CVT as soon as the interface connects;
   # PERIODIC_CMD only fires for the first time one full period later.
-  OPTION CONNECT_CMD DONT_LOG "VEGA GET_HEALTH"
-  OPTION CONNECT_CMD DONT_LOG "VEGA GET_APPROVED_ORGS"
+  OPTION CONNECT_CMD DONT_LOG "<%= vega_target_name %> GET_HEALTH"
+  OPTION CONNECT_CMD DONT_LOG "<%= vega_target_name %> GET_APPROVED_ORGS"
   <% if vega_poll_period.to_f > 0.0 %>
-  OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "VEGA GET_HEALTH"
+  OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "<%= vega_target_name %> GET_HEALTH"
   <% end %>
   <% if vega_slow_poll_period.to_f > 0.0 %>
-  OPTION PERIODIC_CMD DONT_LOG <%= vega_slow_poll_period %> "VEGA GET_APPROVED_ORGS"
+  OPTION PERIODIC_CMD DONT_LOG <%= vega_slow_poll_period %> "<%= vega_target_name %> GET_APPROVED_ORGS"
   <% end %>
   <% if vega_org_id.to_i > 0 %>
-  OPTION CONNECT_CMD DONT_LOG "VEGA GET_WORKSPACE"
-  OPTION CONNECT_CMD DONT_LOG "VEGA GET_FORECASTING_SUMMARY"
+  OPTION CONNECT_CMD DONT_LOG "<%= vega_target_name %> GET_WORKSPACE"
+  OPTION CONNECT_CMD DONT_LOG "<%= vega_target_name %> GET_FORECASTING_SUMMARY"
   <% if vega_poll_period.to_f > 0.0 %>
-  OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "VEGA GET_FORECASTING_SUMMARY"
+  OPTION PERIODIC_CMD DONT_LOG <%= vega_poll_period %> "<%= vega_target_name %> GET_FORECASTING_SUMMARY"
   <% end %>
   <% if vega_slow_poll_period.to_f > 0.0 %>
-  OPTION PERIODIC_CMD DONT_LOG <%= vega_slow_poll_period %> "VEGA GET_WORKSPACE"
+  OPTION PERIODIC_CMD DONT_LOG <%= vega_slow_poll_period %> "<%= vega_target_name %> GET_WORKSPACE"
   <% end %>
   <% end %>
 

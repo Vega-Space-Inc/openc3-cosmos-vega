@@ -29,21 +29,21 @@
 # HTTP_PATH / HTTP_METHOD / HTTP_PACKET / HTTP_ERROR_PACKET are hidden from
 # Command Sender by IGNORE_PARAMETER in target.txt.
 
-COMMAND VEGA GET_HEALTH BIG_ENDIAN "Poll the Vega API health check endpoint (unauthenticated)"
+COMMAND <%= target_name %> GET_HEALTH BIG_ENDIAN "Poll the Vega API health check endpoint (unauthenticated)"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/health_check"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "HEALTH"
   PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
 
-COMMAND VEGA GET_DEMO_KEY BIG_ENDIAN "Fetch Vega's public demo API key (read-only, Demo Org) so a fresh install shows data before the user has a key of their own"
+COMMAND <%= target_name %> GET_DEMO_KEY BIG_ENDIAN "Fetch Vega's public demo API key (read-only, Demo Org) so a fresh install shows data before the user has a key of their own"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/demo_key"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "DEMO_KEY"
   PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
 
-COMMAND VEGA GET_APPROVED_ORGS BIG_ENDIAN "Poll the list of organizations this API key's user has approved access to"
+COMMAND <%= target_name %> GET_APPROVED_ORGS BIG_ENDIAN "Poll the list of organizations this API key's user has approved access to"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/organization_requests/approved_organizations"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
@@ -57,7 +57,7 @@ COMMAND VEGA GET_APPROVED_ORGS BIG_ENDIAN "Poll the list of organizations this A
   PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "" "Per-request Bearer token (Vega frontend API key); empty = use the VEGA_API_KEY secret"
     OBFUSCATE
 
-COMMAND VEGA GET_WORKSPACE BIG_ENDIAN "Poll org workspace: satellites and ground stations for vega_org_id"
+COMMAND <%= target_name %> GET_WORKSPACE BIG_ENDIAN "Poll org workspace: satellites and ground stations for vega_org_id"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/organizations/<%= vega_org_id %>/workspace"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
@@ -71,7 +71,7 @@ COMMAND VEGA GET_WORKSPACE BIG_ENDIAN "Poll org workspace: satellites and ground
   PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "" "Per-request Bearer token (Vega frontend API key); empty = use the VEGA_API_KEY secret"
     OBFUSCATE
 
-COMMAND VEGA GET_FORECASTING_SUMMARY BIG_ENDIAN "Poll interference/coverage forecast summary for vega_org_id"
+COMMAND <%= target_name %> GET_FORECASTING_SUMMARY BIG_ENDIAN "Poll interference/coverage forecast summary for vega_org_id"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/organizations/<%= vega_org_id %>/forecasting/summary"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
@@ -92,7 +92,7 @@ COMMAND VEGA GET_FORECASTING_SUMMARY BIG_ENDIAN "Poll interference/coverage fore
 # built from. SATELLITE_ID/GROUND_STATION_ID/DATE are real (non-DERIVED)
 # parameters so the widget can supply different values on every send, e.g.:
 #   cmd("VEGA GET_DAY_DETAIL with SATELLITE_ID 11324, GROUND_STATION_ID 2473, DATE '2026-08-30'")
-COMMAND VEGA GET_DAY_DETAIL BIG_ENDIAN "Poll one satellite+ground_station+day's interference windows"
+COMMAND <%= target_name %> GET_DAY_DETAIL BIG_ENDIAN "Poll one satellite+ground_station+day's interference windows"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/organizations/<%= vega_org_id %>/forecasting/day_detail"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
@@ -114,7 +114,7 @@ COMMAND VEGA GET_DAY_DETAIL BIG_ENDIAN "Poll one satellite+ground_station+day's 
 # combined) for one satellite+ground_station over an explicit time range,
 # stitched server-side across live PostgreSQL and R2-archived coverage runs.
 # Max range one request may cover: 7 days.
-COMMAND VEGA GET_HISTORY BIG_ENDIAN "Poll historical interference for one satellite+ground_station over a time range"
+COMMAND <%= target_name %> GET_HISTORY BIG_ENDIAN "Poll historical interference for one satellite+ground_station over a time range"
   ACCESSOR HttpAccessor
   PARAMETER HTTP_PATH 0 0 DERIVED nil nil "/api/v1/frontend/organizations/<%= vega_org_id %>/forecasting/history"
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"

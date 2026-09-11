@@ -13,7 +13,7 @@
 # so any 2xx is green and anything else is red (there is no yellow band).
 # RUN_STALE is coloured by STATE: OK (false) green, STALE (true) yellow.
 
-TARGET = 'VEGA'
+TARGET = 'VEGA' # match vega_target_name if the plugin was installed under another name
 PACKET = 'FORECASTING_SUMMARY'
 STAGE_WAIT = 5 # Seconds to hold each stage so the status screen can be watched
 
