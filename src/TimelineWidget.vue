@@ -1002,10 +1002,10 @@ const MAX_BACK_DAYS = 30
 // zoom (passGapUnits converts it), so each pass reads as its own block. A
 // satellite that is always visible (GEO) yields a single day-long pass and
 // keeps normal clock ticks.
-const PASS_GAP_PX = 5
+const PASS_GAP_PX = 14
 // Vertical gap between band rows - the same size as the gap between
 // passes, so the chart reads as a grid of (pass x band) cells.
-const LANE_GAP_PX = 5
+const LANE_GAP_PX = 10
 // Context minutes on each side of a pass. Zero: slices (unlike the old
 // lines) don't need to rise from a baseline, and any padding is dead space
 // inside the box.
@@ -1145,7 +1145,7 @@ const GRIP_PX = 20
 // station; rows of one band sit LANE_GAP_PX apart and bands GROUP_GAP_PX.
 // Bands are far enough apart that, with each band's strip padded 8px above
 // and below its rows, 8px of plain background still shows between strips.
-const GROUP_GAP_PX = 24
+const GROUP_GAP_PX = 32
 // Org workspace pages use /organizations/external/{slug}-{id}/configuration/...
 // - the slug is cosmetic (the route also accepts a bare numeric id with no
 // slug prefix), so we skip generating one and just use the id.
@@ -1953,10 +1953,10 @@ export default {
       if (!this.userSize) return {}
       return { width: `${this.userSize.w}px` }
     },
-    // Band row height in px: 36 (24 with several stations), 200 expanded.
+    // Band row height in px: 52 (40 with several stations), 200 expanded.
     // Fixed - a taller widget adds room below the grid, never taller rows.
     rowHeights() {
-      const base = this.multiStation ? 24 : 36
+      const base = this.multiStation ? 40 : 52
       const result = {}
       for (const b of this.rowKeys) {
         result[b] = this.expandedBand === b ? 200 : base
@@ -2009,7 +2009,7 @@ export default {
       return { seg, start, stop, cx: c0 + (stop - start) / 2 }
     },
     // Where each band's row sits, in px from the top of the plot - mirrors
-    // the lane stack (46px rows, 220px expanded, LANE_GAP_PX between).
+    // the lane stack (52px rows, 200px expanded, LANE_GAP_PX between).
     rowGeometry() {
       const result = {}
       let top = 0
@@ -2632,7 +2632,7 @@ export default {
       }
     },
     rowHeightPx(band) {
-      return this.rowHeights[band] || (this.multiStation ? 24 : 36)
+      return this.rowHeights[band] || (this.multiStation ? 40 : 52)
     },
     inGrip(e) {
       const el = this.$refs.root
@@ -3265,7 +3265,7 @@ export default {
       return (span.clen / view) * (this.laneWidthPx || 1200)
     },
     spanStyle(span) {
-      const row = this.rowGeometry[span.key] || { top: '0px', height: '46px' }
+      const row = this.rowGeometry[span.key] || { top: '0px', height: '52px' }
       const view = this.viewEnd - this.viewStart
       return {
         left: `${this.cToPct(span.cstart)}%`,

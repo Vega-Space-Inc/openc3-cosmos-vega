@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Widget
+- Roomier grid: station rows 40px (52px single-station), 10px between a
+  band's rows, 32px between bands, 14px between pass boxes.
+
 ## 0.48.0 - 2026-09-10
 
 The timeline widget rebuilt as a pass-by-band grid, with demo mode and an
