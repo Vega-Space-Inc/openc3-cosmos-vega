@@ -14,7 +14,6 @@
 TELEMETRY VEGA HEALTH BIG_ENDIAN "Vega API health check (no auth required)"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code"
-    LIMITS DEFAULT 1 ENABLED 199 199 300 300
   APPEND_ITEM STATUS 256 STRING "Health status string, expect 'healthy'"
     KEY $.status
   APPEND_ITEM ENVIRONMENT 256 STRING "Deployment environment"
@@ -32,7 +31,6 @@ TELEMETRY VEGA HEALTH BIG_ENDIAN "Vega API health check (no auth required)"
 TELEMETRY VEGA ERROR_RESPONSE BIG_ENDIAN "Non-2xx response from any Vega endpoint (bad/expired key, no approved org access, rate limit, not found, server error). Raw body, see HTTP_STATUS for the code."
   ACCESSOR HttpAccessor BinaryAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, e.g. 401 = bad/expired VEGA_API_KEY secret, 403 = no approved access to vega_org_id, 404 = unknown org / no data in range, 429 = rate limited, 5xx = Vega server error"
-    LIMITS DEFAULT 1 ENABLED 199 199 300 300
   APPEND_ITEM BODY 0 STRING "Raw response body (HTML or JSON, unparsed)"
 
 TELEMETRY VEGA DEMO_KEY BIG_ENDIAN "Vega's public demo API key: read-only access to the Demo Org, served by Vega so it can be rotated without a plugin release. Nothing secret - it is what any visitor gets."
@@ -48,7 +46,6 @@ TELEMETRY VEGA DEMO_KEY BIG_ENDIAN "Vega's public demo API key: read-only access
 TELEMETRY VEGA APPROVED_ORGS BIG_ENDIAN "Organizations this API key's user has approved access to - use these ids for vega_org_id"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 401 means the key is bad/expired"
-    LIMITS DEFAULT 1 ENABLED 199 199 300 300
   APPEND_ITEM FIRST_ORG_ID 32 UINT "Org ID of the first approved organization"
     KEY $.data.organizations[0].id
   APPEND_ITEM FIRST_ORG_NAME 256 STRING "Name of the first approved organization"
@@ -63,7 +60,6 @@ TELEMETRY VEGA APPROVED_ORGS BIG_ENDIAN "Organizations this API key's user has a
 TELEMETRY VEGA WORKSPACE BIG_ENDIAN "Satellites and ground stations for the requested org - first-record snapshot"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
-    LIMITS DEFAULT 1 ENABLED 199 199 300 300
   APPEND_ITEM ORG_ID 32 UINT "Organization id echoed back - lets a caller confirm this response is for the org it asked about (e.g. via an HTTP_PATH override), since periodic polls to the default vega_org_id keep updating this same packet in the background"
     KEY $.data.organization.id
   APPEND_ITEM ORG_NAME 256 STRING "Organization name"
@@ -92,7 +88,6 @@ TELEMETRY VEGA WORKSPACE BIG_ENDIAN "Satellites and ground stations for the requ
 TELEMETRY VEGA FORECASTING_SUMMARY BIG_ENDIAN "Interference/coverage forecast summary for the requested org - forecast run status plus the first satellite's most recent day"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
-    LIMITS DEFAULT 1 ENABLED 199 199 300 300
   APPEND_ITEM ORG_ID 32 UINT "Organization id echoed back - lets a caller confirm this response is for the org it asked about (e.g. via an HTTP_PATH override), since periodic polls to the default vega_org_id keep updating this same packet in the background"
     KEY $.data.organization.id
   APPEND_ITEM SATELLITES_JSON 0 ARRAY "Full satellites array (id, name, norad, bands, forecast_available, latest_run_id, last_forecast_at, days, etc) - used by the ForecastTimeline widget to sort/disable satellites in its picker by forecast availability"
@@ -105,8 +100,8 @@ TELEMETRY VEGA FORECASTING_SUMMARY BIG_ENDIAN "Interference/coverage forecast su
   # coloured by STATE. Displays as OK / STALE.
   APPEND_ITEM RUN_STALE 40 STRING "Whether the forecast run is stale (JSON true/false)"
     KEY $.data.forecast_run.stale
-    STATE OK false GREEN
-    STATE STALE true YELLOW
+    STATE OK false
+    STATE STALE true
   APPEND_ITEM FIRST_SAT_NAME 256 STRING "Name of the first satellite in the forecast"
     KEY $.data.satellites[0].name
   APPEND_ITEM FIRST_SAT_FORECAST_AVAILABLE 8 BOOL "Whether a forecast is available for the first satellite"
@@ -115,9 +110,9 @@ TELEMETRY VEGA FORECASTING_SUMMARY BIG_ENDIAN "Interference/coverage forecast su
     KEY $.data.satellites[0].days[0].max_intensity
   APPEND_ITEM FIRST_SAT_DAY_MAX_SEVERITY 256 STRING "Max interference severity on the first satellite's first forecast day, e.g. low/medium/high"
     KEY $.data.satellites[0].days[0].max_severity
-    STATE LOW low GREEN
-    STATE MEDIUM medium YELLOW
-    STATE HIGH high RED
+    STATE LOW low
+    STATE MEDIUM medium
+    STATE HIGH high
   APPEND_ITEM FIRST_SAT_DAY_EVENT_COUNT 32 UINT "Interference event count on the first satellite's first forecast day"
     KEY $.data.satellites[0].days[0].event_count
 
@@ -128,7 +123,6 @@ TELEMETRY VEGA FORECASTING_SUMMARY BIG_ENDIAN "Interference/coverage forecast su
 TELEMETRY VEGA DAY_DETAIL BIG_ENDIAN "Interference windows for one satellite+ground_station+day"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
-    LIMITS DEFAULT 1 ENABLED 199 199 300 300
   APPEND_ITEM SATELLITE_ID 32 UINT "Satellite id echoed back"
     KEY $.data.satellite.id
   APPEND_ITEM SATELLITE_NAME 256 STRING "Satellite name echoed back"
@@ -153,7 +147,6 @@ TELEMETRY VEGA DAY_DETAIL BIG_ENDIAN "Interference windows for one satellite+gro
 TELEMETRY VEGA HISTORY BIG_ENDIAN "Measured historical interference for one satellite+ground_station over a time range"
   ACCESSOR HttpAccessor JsonAccessor
   ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org, 404 means no coverage runs overlap the requested range"
-    LIMITS DEFAULT 1 ENABLED 199 199 300 300
   APPEND_ITEM SATELLITE_ID 32 UINT "Satellite id echoed back"
     KEY $.data.satellite.id
   APPEND_ITEM SATELLITE_NAME 256 STRING "Satellite name echoed back"
