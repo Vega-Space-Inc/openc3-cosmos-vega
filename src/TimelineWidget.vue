@@ -468,7 +468,7 @@
             style="height: 32px"
             :loading="historyLoading"
             :disabled="loading"
-            title="The earlier part of this day is before the current forecast run. Vega's measured-history build takes 30-45 seconds."
+            title="The earlier part of this day is before the current forecast run. Loading it takes a few seconds the first time; after that it is cached."
             @click="loadHistoryNow"
           >
             Load measured history
@@ -1608,9 +1608,6 @@ export default {
       // Size the user dragged the widget to ({w, h} in CSS px), or null for
       // automatic. Remembered in this browser.
       userSize: readStoredSize(),
-      // Height of the lanes area, kept current by the ResizeObserver; with
-      // a user-set height the band rows share it (see rowHeights).
-      laneAreaPx: 0,
       // Measured history the current window could still fetch on request
       // ({pastDays, range}), and whether that fetch is running.
       pendingHistory: null,
@@ -2311,13 +2308,6 @@ export default {
       if (!this.userSize) return {}
       return { width: `${this.userSize.w}px` }
     },
-    // Band row height in px. Automatic: 46 (220 expanded). With a user-set
-    // height the rows share the lanes area: all rows grow equally up to
-    // COLLAPSED_MAX_PX (a tall widget keeps compact sparklines rather than
-    // three screen-filling rows; clicking a band is how to see it large),
-    // or, with a band expanded, the others stay at 46 and the expanded one
-    // takes the rest. Never below the automatic sizes, so a short window
-    // scrolls rather than squashing the bars.
     // Band row height in px: 36 (24 with several stations), 200 expanded.
     // Fixed - a taller widget adds room below the grid, never taller rows.
     rowHeights() {
@@ -3048,16 +3038,11 @@ export default {
       if (!el || el === this._laneObserved) return
       if (this._laneResizeObserver) this._laneResizeObserver.disconnect()
       this._laneObserved = el
-      const rect = el.getBoundingClientRect()
-      this.laneWidthPx = rect.width
-      this.laneAreaPx = rect.height
+      this.laneWidthPx = el.getBoundingClientRect().width
       if (typeof ResizeObserver === 'undefined') return
       this._laneResizeObserver = new ResizeObserver((entries) => {
-        const rect = entries[0]?.contentRect
-        const w = rect?.width
-        const h = rect?.height
+        const w = entries[0]?.contentRect?.width
         if (w && Math.abs(w - this.laneWidthPx) >= 1) this.laneWidthPx = w
-        if (h && Math.abs(h - this.laneAreaPx) >= 1) this.laneAreaPx = h
       })
       this._laneResizeObserver.observe(el)
     },
@@ -4114,7 +4099,7 @@ export default {
       if (!pending || this.historyLoading) return
       const { pastDays, range } = pending
       this.historyLoading = true
-      this.progressText = 'Loading measured history (Vega can take ~40s)'
+      this.progressText = 'Loading measured history…'
       try {
         await this.loadHistory(
           this.selectedSatelliteId,
