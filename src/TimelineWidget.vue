@@ -2740,10 +2740,21 @@ export default {
     // classify it without a round trip to Vega. Otherwise (never received,
     // or a stale success we can't vouch for) run the active probe.
     async checkIntegration() {
+      // With no key of its own, get the public demo key FIRST. Every later
+      // request (workspace, day detail) needs some key on it - the interface
+      // drops keyless requests - so a browser with none must not be told it
+      // is connected just because the CVT holds a 200 from someone else's
+      // (or an earlier) key.
+      if (!this.savedApiKey && !this.demoKey) await this.fetchDemoKey()
+      const haveKey = !!(this.savedApiKey || this.demoKey)
       try {
         const snap = await this.readPackets(INTEGRATION_SPEC)
         const ok = snap.APPROVED_ORGS
-        if (stampOf(ok) > 0 && (Number(ok.HTTP_STATUS) || 0) === 200) {
+        if (
+          haveKey &&
+          stampOf(ok) > 0 &&
+          (Number(ok.HTTP_STATUS) || 0) === 200
+        ) {
           this.applyApprovedOrgs(ok.ORGANIZATIONS_JSON)
           return
         }
@@ -2751,15 +2762,6 @@ export default {
         // fall through to the active probe
       }
       await this.retryIntegrationCheck()
-      // No key of its own and Vega didn't accept the (empty) request: try
-      // the public demo key so a fresh install shows data straight away.
-      if (
-        this.integrationState === 'missing_key' &&
-        !this.savedApiKey &&
-        !this.demoKey
-      ) {
-        if (await this.fetchDemoKey()) await this.retryIntegrationCheck()
-      }
     },
     // "Check again" button in the onboarding state (and the mount-time
     // fallback): sends GET_APPROVED_ORGS and waits for the answer to land.
