@@ -3,15 +3,13 @@
 #
 #   1. Live: sends GET_APPROVED_ORGS and confirms the VEGA_API_KEY secret is
 #      accepted (HTTP 200), printing the first approved organization.
-#   2. Offline: injects FORECASTING_SUMMARY values to walk RUN_STALE (STATE
-#      colour) and HTTP_STATUS (LIMITS) through green / yellow / red so the
-#      status screen alerting can be seen without waiting on real data, then
-#      refetches the real packet to put things back.
+#   2. Offline: injects FORECASTING_SUMMARY values to walk RUN_STALE through
+#      its OK / STALE states and HTTP_STATUS through 200 / 500 so the status
+#      screen can be watched without waiting on real data, then refetches the
+#      real packet to put things back.
 #
-# The HTTP_STATUS limits under test come from cmd_tlm/tlm.txt:
-#   LIMITS DEFAULT 1 ENABLED 199 199 300 300
-# so any 2xx is green and anything else is red (there is no yellow band).
-# RUN_STALE is coloured by STATE: OK (false) green, STALE (true) yellow.
+# No packet declares LIMITS (see README), so HTTP_STATUS carries no colour;
+# RUN_STALE is a STATE item and its state name shows on the screen.
 
 TARGET = 'VEGA' # match vega_target_name if the plugin was installed under another name
 PACKET = 'FORECASTING_SUMMARY'
@@ -51,8 +49,8 @@ end
 # name, RUN_STALE state, HTTP_STATUS
 STAGES = [
   ['Nominal',                            'OK',    200],
-  ['Stale forecast run - RUN_STALE yellow', 'STALE', 200],
-  ['API failure - HTTP_STATUS red',      'STALE', 500],
+  ['Stale forecast run - RUN_STALE = STALE', 'STALE', 200],
+  ['API failure - HTTP_STATUS 500',      'STALE', 500],
   ['Back to nominal',                    'OK',    200],
 ]
 

@@ -6,20 +6,23 @@
 
 Polls the Vega Space frontend API (`/api/v1/frontend/*` on
 `admin.vega.space`) and surfaces satellite interference/coverage data as
-COSMOS telemetry:
+COSMOS telemetry, plus a Timeline widget that draws the forecast as a
+pass-by-band grid. The target is `VEGA` by default (`vega_target_name`);
+its interface is `<target>_INT`.
 
-- `VEGA HEALTH` - API reachability (unauthenticated)
-- `VEGA APPROVED_ORGS` - organizations your API key's user has approved
+Four packets are polled in the background:
+
+- `HEALTH` - API reachability (unauthenticated)
+- `APPROVED_ORGS` - organizations your API key's user has approved
   access to (first-org snapshot) - use an id from here as `vega_org_id`
-- `VEGA WORKSPACE` - satellites and ground stations for `vega_org_id`
+- `WORKSPACE` - satellites and ground stations for `vega_org_id`
   (first-record snapshots)
-- `VEGA FORECASTING_SUMMARY` - interference/coverage forecast run status,
+- `FORECASTING_SUMMARY` - interference/coverage forecast run status,
   plus the first satellite's most recent forecast day (max intensity,
   severity, event count)
 
-All four packets are fetched once when `VEGA_INT` connects (so the CVT is
-populated immediately) and then re-polled on two cadences via
-`HttpClientInterface`:
+They are fetched once when the interface connects (so the CVT is populated
+immediately) and then re-polled on two cadences:
 
 - `vega_poll_period` (default 120 s) - `HEALTH` and `FORECASTING_SUMMARY`
 - `vega_slow_poll_period` (default 3600 s) - `APPROVED_ORGS` and
@@ -28,7 +31,11 @@ populated immediately) and then re-polled on two cadences via
 Set either to `0` to disable that periodic poll (the connect-time fetch still
 runs). `WORKSPACE` and `FORECASTING_SUMMARY` only poll once `vega_org_id` is
 set to a nonzero org id (see Setup). Request timeouts are `vega_read_timeout`
-(default 30 s) and `vega_connect_timeout` (default 10 s).
+(default 90 s) and `vega_connect_timeout` (default 10 s).
+
+Three more packets are fetched on demand, not polled: `DEMO_KEY` (the widget
+asks for it on a fresh install), and `DAY_DETAIL` / `HISTORY` (the widget
+requests them per satellite, ground station and day as the user browses).
 
 Any non-2xx response from any command is routed to `VEGA ERROR_RESPONSE`
 instead of the success packet: `HTTP_STATUS` carries the code (401 = bad or
@@ -103,10 +110,11 @@ logs are written. COSMOS never stores it.
 / `GET_APPROVED_ORGS` / `GET_WORKSPACE` / `GET_FORECASTING_SUMMARY` polls that
 feed the Status screen send no per-request token, so they use the COSMOS
 secret `VEGA_API_KEY` if one exists: Admin -> Secrets, name `VEGA_API_KEY`,
-value = a `vgk_...` key (no `Bearer ` prefix), then restart `VEGA_INT` so the
-interface picks it up. Without it those polls return 401 into
-`ERROR_RESPONSE`, which is harmless - the widget still works with a user's
-key. A key entered on the dashboard always wins for that request.
+value = a `vgk_...` key (no `Bearer ` prefix), then restart the interface so
+it picks the secret up. Without it the authenticated polls are dropped
+before they are sent (one warning in the interface log; the unauthenticated
+`GET_HEALTH` still goes out), which is harmless - the widget still works with
+a user's key. A key entered on the dashboard always wins for that request.
 
 Then:
 
@@ -123,7 +131,7 @@ Then:
 
 To rotate a dashboard key, use "Forget it" in the widget and enter the new
 one. To rotate the secret, change its value in Admin -> Secrets and restart
-`VEGA_INT`. Revoke keys in the Vega app if this COSMOS instance is ever
+the interface. Revoke keys in the Vega app if this COSMOS instance is ever
 decommissioned.
 
 ## Extending
@@ -143,35 +151,73 @@ endpoints (`forecasting/heatmap_slice`, `forecasting/track`,
   in a loop and does something more dynamic, or
 - build a custom Vue tool that calls the COSMOS API directly
 
-## Building non-tool / widget plugins
+## What is where
 
-1. <Path to COSMOS installation>/openc3.sh cli rake build VERSION=X.Y.Z (or openc3.bat for Windows)
-   - VERSION is required
-   - gem file will be built locally
+| Piece | Where |
+|---|---|
+| Plugin variables, target, interface, polling, `WIDGET Timeline` | `plugin.txt` |
+| `GET_*` commands (one per Vega endpoint) | `targets/VEGA/cmd_tlm/cmd.txt` |
+| Response packets, `KEY` paths into the JSON, `ERROR_RESPONSE` | `targets/VEGA/cmd_tlm/tlm.txt` |
+| API key write protocol (per-request token or secret, scrubbed from logs) | `targets/VEGA/lib/api_key_protocol.rb` |
+| HTTP client interface with reconnect fix | `targets/VEGA/lib/vega_http_client_interface.rb` |
+| Timeline widget screen / COSMOS-native status screen | `targets/VEGA/screens/forecast.txt`, `status.txt` |
+| Smoke-test script for Script Runner | `targets/VEGA/procedures/procedure.rb` |
+| Widget source (Vue 3 + Vuetify 3) | `src/TimelineWidget.vue` and `src/` |
+| Built widget (generated, not committed) | `tools/widgets/TimelineWidget/` |
+| Store image | `public/store_img.png` |
 
-## Building tool / widget plugins using a local Ruby/Node/pnpm/Rake Environment
+## Building
 
-1. pnpm install --frozen-lockfile --ignore-scripts
-1. rake build VERSION=1.0.0
+Needs Ruby, Node and pnpm (the gem includes the built widget).
 
-## Building tool / widget plugins using Docker and the openc3-node container
-
-If you don’t have a local node environment, you can use our openc3-node container to build custom tools and custom widgets
-
-Mac / Linux:
-
+```bash
+pnpm install --frozen-lockfile --ignore-scripts
+rake build VERSION=X.Y.Z
 ```
+
+`rake build` runs `pnpm run build` (Vite, UMD bundle into `tools/widgets/`)
+then `gem build`, and validates the gem if `openc3cli` is on the PATH.
+Without a local Node environment use the OpenC3 node container:
+
+```bash
 docker run -it -v `pwd`:/openc3/local:z -w /openc3/local docker.io/openc3inc/openc3-node sh
+# then, inside: pnpm install --frozen-lockfile --ignore-scripts && rake build VERSION=X.Y.Z
 ```
 
-Windows:
+### Development loop
 
-```
-docker run -it -v %cd%:/openc3/local -w /openc3/local docker.io/openc3inc/openc3-node sh
-```
+`bin/dev-install.sh` builds a timestamped gem and loads it straight into a
+local COSMOS compose stack (through the cmd-tlm-api container, the same path
+Admin > Plugins uses), upgrading any installed copy in place. Plugin
+variable values come from `vars.json` (gitignored; copy the keys from
+`plugin.txt`). Hard-refresh the browser afterwards - the widget bundle is
+cached - and check the build stamp in the widget's settings menu to be sure
+the new one loaded.
 
-1. pnpm install --frozen-lockfile --ignore-scripts
-1. rake build VERSION=1.0.0
+### Customizing
+
+- **Target name.** Everything templates on `vega_target_name`; the widget
+  reads the target from its screen line (`TIMELINE <%= target_name %>`).
+  Only the smoke-test script hard-codes `VEGA` (procedures are not
+  templated) - edit its `TARGET` constant if you rename.
+- **New endpoints.** Add a `COMMAND` with the four derived HTTP parameters
+  and a `TELEMETRY` packet with `ACCESSOR HttpAccessor JsonAccessor` and
+  `KEY` paths, exactly like the existing ones. Point `HTTP_ERROR_PACKET` at
+  `ERROR_RESPONSE` so failures land in one place. Add `HTTP_HEADER_AUTHORIZATION`
+  with `OBFUSCATE` if the endpoint needs a key.
+- **COSMOS version.** The widget builds against `@openc3/js-common` and
+  `@openc3/vue-common` pinned in `package.json`; keep them on the same
+  minor as the COSMOS you run and bump `openc3_cosmos_minimum_version` in
+  the gemspec together with them. Vue, Vuetify, Pinia and vue-router are
+  externals supplied by COSMOS at runtime, not bundled.
+- **Source map.** COSMOS copies `<widget>.umd.min.js.map` at install
+  unconditionally, so `sourcemap: true` in `vite.config.js` must stay on.
+- **Limits and alarms.** No packet declares `LIMITS` on purpose (see above).
+  Add them in your copy of `tlm.txt` if you want COSMOS notifications.
+- **Interface subclass.** `vega_http_client_interface.rb` only drains the
+  stock `HttpClientInterface` response queue on connect, which stops a
+  reconnect loop after an in-process disconnect. If a future COSMOS fixes
+  that, switch `plugin.txt` back to `openc3/interfaces/http_client_interface.rb`.
 
 ## Installing into OpenC3 COSMOS
 

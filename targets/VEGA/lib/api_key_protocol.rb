@@ -14,9 +14,9 @@
 #
 # NO KEY AT ALL: an authenticated request is DROPPED (:STOP) rather than
 # sent. Without the secret, the background PERIODIC_CMD polls have nothing to
-# authenticate with; sending them anyway just buys a 401 every period, which
-# lands in ERROR_RESPONSE and trips its RED limit - a stream of alarms about
-# a request that could never have succeeded. The one unauthenticated path
+# authenticate with; sending them anyway just buys a 401 every period into
+# ERROR_RESPONSE - a stream of failures for a request that could never have
+# succeeded. The one unauthenticated path
 # (the health check) still goes out. A warning is logged once.
 #
 # WHY THE SCRUB: HttpAccessor stores HTTP_HEADER_* parameters in packet.extra,
@@ -86,7 +86,7 @@ module OpenC3
           unless @warned
             # Warn once per instance so the periodic polls don't flood the log
             @warned = true
-            Logger.warn("No API key and #{@env_var} is not set - authenticated requests are dropped until a key is entered in the Timeline widget or the secret is created in Admin / Secrets (then restart VEGA_INT)")
+            Logger.warn("No API key and #{@env_var} is not set - authenticated requests are dropped until a key is entered in the Timeline widget or the secret is created in Admin / Secrets (then restart the interface)")
           end
           return :STOP
         end
