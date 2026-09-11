@@ -914,263 +914,43 @@
           </button>
         </div>
 
-        <v-dialog v-model="showKeyDialog" max-width="520">
-          <v-card class="asi-info">
-            <v-card-title class="asi-info-title"
-              >Connect your Vega data</v-card-title
-            >
-            <v-card-text class="asi-info-body">
-              <p>
-                Paste a Vega <em>frontend</em> API key (it starts with
-                <code>vgk_</code>) and the chart switches from the demo
-                satellites to your organization's. The key stays in this
-                browser; COSMOS masks it in logs and never stores it.
-              </p>
-              <form class="onboarding-keyform" @submit.prevent="saveApiKey">
-                <div class="onboarding-keyrow">
-                  <input
-                    v-model="apiKeyInput"
-                    class="onboarding-input"
-                    type="password"
-                    placeholder="vgk_…"
-                    autocomplete="off"
-                    spellcheck="false"
-                    :disabled="savingKey"
-                  />
-                  <button
-                    type="submit"
-                    class="onboarding-save"
-                    :disabled="savingKey || !apiKeyInput.trim()"
-                  >
-                    {{ savingKey ? 'Checking…' : 'Connect' }}
-                  </button>
-                </div>
-                <div v-if="saveKeyError" class="onboarding-error">
-                  {{ saveKeyError }}
-                </div>
-              </form>
-              <div class="asi-info-note keydlg-nokey">
-                <p class="keydlg-nokey-text">No key yet?</p>
-                <div class="keydlg-ctas">
-                  <v-btn
-                    color="primary"
-                    variant="flat"
-                    size="small"
-                    :href="VEGA_SIGNUP_URL"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    Sign up
-                  </v-btn>
-                  <v-btn
-                    variant="outlined"
-                    size="small"
-                    :href="VEGA_SIGNIN_URL"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    Sign in
-                  </v-btn>
-                </div>
-                <a
-                  class="keydlg-apikeys"
-                  :href="VEGA_API_KEYS_URL"
-                  target="_blank"
-                  rel="noopener"
-                  >API keys →</a
-                >
-              </div>
-            </v-card-text>
-            <v-card-actions>
-              <v-spacer />
-              <v-btn variant="text" @click="showKeyDialog = false">Close</v-btn>
-            </v-card-actions>
-          </v-card>
-        </v-dialog>
+        <connect-key-dialog
+          v-model="showKeyDialog"
+          :saving="savingKey"
+          :error="saveKeyError"
+          :api-keys-url="VEGA_API_KEYS_URL"
+          :signup-url="VEGA_SIGNUP_URL"
+          :signin-url="VEGA_SIGNIN_URL"
+          @submit="saveApiKey"
+        />
 
-        <v-dialog v-model="showAsiInfo" max-width="600" scrollable>
-          <v-card class="asi-info">
-            <v-card-title class="asi-info-title"
-              >ASI Risk Overview</v-card-title
-            >
-            <v-card-text class="asi-info-body">
-              <p>
-                <strong>Adjacent satellite interference (ASI)</strong> is the
-                risk that another satellite transmitting in the same frequency
-                band is in your ground station's view at the same time as the
-                satellite you are tracking, so its signal can land in your
-                receiver alongside the one you want. Vega models all 15,000+
-                active satellites - their orbits, their frequencies, their beam
-                patterns - and forecasts where and when transmissions will
-                overlap, up to three days ahead.
-              </p>
-
-              <h4>How the forecast is built</h4>
-              <ol>
-                <li>
-                  <strong>Orbital tracking.</strong> Two-Line Element sets from
-                  authoritative sources, refreshed daily, are propagated forward
-                  with industry-standard orbital mechanics that account for
-                  atmospheric drag, Earth's oblateness (J2) and solar radiation
-                  pressure.
-                </li>
-                <li>
-                  <strong>Frequency conflict identification.</strong> Only
-                  satellites operating in overlapping bands can interfere.
-                  Satellites are mapped to their frequency allocations from
-                  regulatory databases and public filings, and only confirmed
-                  overlaps or recorded usages are flagged as potential
-                  interferers.
-                </li>
-                <li>
-                  <strong>Coverage analysis.</strong> Each satellite's field of
-                  regard is modelled as a cone tangent to Earth's surface over
-                  an equal-area HEALPix grid at roughly 100 km resolution, for
-                  every minute of the three-day window - 4,320 epochs per
-                  analysis.
-                </li>
-                <li>
-                  <strong>Interference event detection.</strong> For each
-                  minute, your satellite's footprint and every potential
-                  interferer's footprint are computed and their intersections
-                  found - the areas where both are in view at once.
-                </li>
-                <li>
-                  <strong>Aggregation per band.</strong> The resulting matrices
-                  (epoch × interfering satellite) are combined per operating
-                  band into a per-cell intensity for every epoch. The count
-                  behind each bar here is that intensity read at your ground
-                  station's cell: how many same-band satellites share its sky
-                  that minute.
-                </li>
-              </ol>
-
-              <h4>Reading this chart</h4>
-              <ul>
-                <li>
-                  Each bar is one minute (or a few minutes when the view is too
-                  narrow to show them individually - the tooltip then says
-                  which). Height and colour are that minute's count relative to
-                  the band's busiest minute in the loaded day, from green
-                  (quiet) through amber to red (the peak). The tooltip gives the
-                  actual count.
-                </li>
-                <li>
-                  A flat row of green stubs means the band was analysed and
-                  found clear. An empty box means there is no reading for that
-                  band in that pass.
-                </li>
-                <li>
-                  Today and the next two days come from the latest forecast run;
-                  earlier days are the measured record. Only time when the
-                  satellite is in view of the station is shown - the gaps
-                  between passes are removed.
-                </li>
-              </ul>
-
-              <h4>Validation and limits</h4>
-              <ul>
-                <li>
-                  Orbital data is refreshed daily; predictions degrade beyond
-                  three days, which is why the forecast stops there.
-                </li>
-                <li>
-                  Frequency mappings carry confidence levels based on the
-                  quality of their source.
-                </li>
-                <li>
-                  Telemetry and ground readings feed a learning layer that
-                  refines the models and confidence scoring over time.
-                </li>
-                <li>
-                  Some things cannot be predicted: solar storms, unannounced
-                  satellite manoeuvres and intentional jamming.
-                </li>
-              </ul>
-              <p class="asi-info-note">
-                Counts are geometric and spectral - they say how many same-band
-                satellites share the station's sky, not the received power of
-                each. Treat a high count as a cue to check the pass, not as a
-                measured carrier-to-interference ratio.
-              </p>
-            </v-card-text>
-            <v-card-actions>
-              <v-spacer />
-              <v-btn variant="text" @click="showAsiInfo = false">Close</v-btn>
-            </v-card-actions>
-          </v-card>
-        </v-dialog>
+        <asi-info-dialog v-model="showAsiInfo" />
       </div>
     </template>
     <!-- Onboarding tour: the page dims except for a spotlighted region,
          with a card of copy beside it - the same shape as the Vega app's
          forecast tour. Steps whose target isn't on screen are skipped. -->
-    <teleport to="body">
-      <div v-if="tourActive && tourRect" class="tour-layer">
-        <div class="tour-shield" />
-        <div
-          class="tour-frame"
-          :style="{
-            top: tourRect.top + 'px',
-            left: tourRect.left + 'px',
-            width: tourRect.width + 'px',
-            height: tourRect.height + 'px',
-          }"
-        >
-          <span class="tour-dash" />
-          <span class="tour-corner tl" />
-          <span class="tour-corner tr" />
-          <span class="tour-corner bl" />
-          <span class="tour-corner br" />
-        </div>
-        <v-card
-          ref="tourCard"
-          class="tour-card asi-info"
-          :style="{
-            top: tourCardPos.top + 'px',
-            left: tourCardPos.left + 'px',
-          }"
-          aria-label="Widget tour"
-        >
-          <v-card-title class="asi-info-title tour-title-row">
-            <span>{{ tourStep.title }}</span>
-            <span class="tour-count"
-              >{{ tourIndex + 1 }} / {{ tourStepIds.length }}</span
-            >
-          </v-card-title>
-          <v-card-text :key="tourStep.id" class="asi-info-body tour-text">
-            {{ tourStep.body }}
-          </v-card-text>
-          <v-card-actions>
-            <v-btn variant="text" size="small" @click="finishTour">
-              Skip tour
-            </v-btn>
-            <v-spacer />
-            <v-btn
-              v-if="tourIndex > 0"
-              variant="outlined"
-              size="small"
-              @click="tourGo(-1)"
-            >
-              Back
-            </v-btn>
-            <v-btn
-              color="primary"
-              variant="flat"
-              size="small"
-              @click="tourGo(1)"
-            >
-              {{ tourIndex >= tourStepIds.length - 1 ? 'Done' : 'Next' }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </div>
-    </teleport>
+    <tour-overlay
+      ref="tour"
+      :active="tourActive"
+      :rect="tourRect"
+      :card-pos="tourCardPos"
+      :step="tourStep"
+      :index="tourIndex"
+      :total="tourStepIds.length"
+      @skip="finishTour"
+      @back="tourGo(-1)"
+      @next="tourGo(1)"
+    />
   </div>
 </template>
 
 <script>
 import { Cable, OpenC3Api } from '@openc3/js-common/services'
+import AsiInfoDialog from './AsiInfoDialog.vue'
+import ConnectKeyDialog from './ConnectKeyDialog.vue'
+import TourOverlay from './TourOverlay.vue'
+import './dialogs.css'
 import { zoneParts, zoneOffsetMin, zoneMidnightMs, pad2 } from './lib/time'
 import {
   RAMP_STEPS,
@@ -1417,6 +1197,7 @@ const TLM_ITEM_BLOCKLIST = new Set([
 ])
 
 export default {
+  components: { AsiInfoDialog, ConnectKeyDialog, TourOverlay },
   // The COSMOS screen passes a handful of extra props (widgetIndex,
   // namedWidgets, line, ...) meant for the stock Widget mixin; keep the ones
   // we don't declare from landing on the root element as attributes.
@@ -2805,9 +2586,7 @@ export default {
       }
       // Card: below, then right, then left, then above - first that fits,
       // clamped to the viewport as a last resort.
-      const cardRef = this.$refs.tourCard
-      const cardEl = cardRef && (cardRef.$el || cardRef)
-      const ch = cardEl && cardEl.offsetHeight ? cardEl.offsetHeight : 190
+      const ch = (this.$refs.tour && this.$refs.tour.cardHeight()) || 190
       const centeredLeft = r.left + r.width / 2 - TOUR_CARD_W / 2
       const candidates = [
         { top: r.top + r.height + TOUR_GAP, left: centeredLeft },
@@ -3046,8 +2825,12 @@ export default {
         return false
       }
     },
-    async saveApiKey() {
-      const key = (this.apiKeyInput || '').trim()
+    // From the onboarding form (no argument: reads apiKeyInput) or from the
+    // ConnectKeyDialog (the key as a string).
+    async saveApiKey(fromDialog) {
+      const key = (
+        typeof fromDialog === 'string' ? fromDialog : this.apiKeyInput || ''
+      ).trim()
       if (!key) return
       if (!key.startsWith('vgk_')) {
         this.saveKeyError =
@@ -4559,100 +4342,8 @@ export default {
 .settings-item :deep(.v-list-item__content) {
   overflow: visible;
 }
-/* ---- Onboarding tour (teleported to <body>) ---- */
-.tour-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 9000;
-  animation: tour-fade 0.3s ease;
-}
-@keyframes tour-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-.tour-shield {
-  position: absolute;
-  inset: 0;
-}
 /* The dimming is the frame's giant shadow, so the target stays bright.
    Colours come from the COSMOS theme, like the widget's dialogs. */
-.tour-frame {
-  position: absolute;
-  color: rgb(var(--v-theme-secondary));
-  box-shadow: 0 0 0 100vmax rgba(var(--v-theme-background), 0.82);
-  border-radius: 4px;
-  pointer-events: none;
-  transition:
-    top 0.3s ease,
-    left 0.3s ease,
-    width 0.3s ease,
-    height 0.3s ease;
-}
-.tour-dash {
-  position: absolute;
-  inset: 0;
-  border: 1px dashed currentColor;
-  border-radius: 4px;
-  opacity: 0.45;
-}
-.tour-corner {
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-color: currentColor;
-  border-style: solid;
-  border-width: 0;
-}
-.tour-corner.tl {
-  top: -1px;
-  left: -1px;
-  border-top-width: 2px;
-  border-left-width: 2px;
-}
-.tour-corner.tr {
-  top: -1px;
-  right: -1px;
-  border-top-width: 2px;
-  border-right-width: 2px;
-}
-.tour-corner.bl {
-  bottom: -1px;
-  left: -1px;
-  border-bottom-width: 2px;
-  border-left-width: 2px;
-}
-.tour-corner.br {
-  bottom: -1px;
-  right: -1px;
-  border-bottom-width: 2px;
-  border-right-width: 2px;
-}
-.tour-card {
-  position: absolute !important;
-  width: 320px;
-  transition:
-    top 0.3s ease,
-    left 0.3s ease;
-}
-.tour-title-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-.tour-count {
-  font-size: 11px;
-  font-weight: 400;
-  opacity: 0.55;
-  white-space: nowrap;
-}
-.tour-text {
-  padding-top: 10px !important;
-}
 .build-stamp {
   font-size: 11px;
   opacity: 0.6;
@@ -4696,120 +4387,11 @@ export default {
 .asi-info-btn:hover .asi-info-label {
   text-decoration: underline;
 }
-.asi-info-title {
-  font-size: 18px;
-}
-.asi-info-body {
-  font-size: 14px;
-  line-height: 1.5;
-  /* Capped so the dialog never outgrows the viewport; the body scrolls
-     (v-dialog `scrollable` keeps the title and Close pinned) */
-  max-height: 60vh;
-  overflow-y: auto;
-}
-.asi-info-body h4 {
-  margin: 14px 0 6px;
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.75;
-}
-.asi-info-body p,
-.asi-info-body li {
-  margin-bottom: 8px;
-}
-.asi-info-body ol,
-.asi-info-body ul {
-  padding-left: 22px;
-}
-.asi-info-body code {
-  font-size: 12px;
-}
-.keydlg-nokey-text {
-  margin: 0 0 10px;
-}
-.keydlg-ctas {
-  display: flex;
-  gap: 8px;
-}
-.keydlg-apikeys {
-  display: inline-block;
-  margin-top: 10px;
-  font-size: 12px;
-  color: #4fc3f7;
-  text-decoration: none;
-}
-.keydlg-apikeys:hover {
-  text-decoration: underline;
-}
-.asi-info-note {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(128, 128, 128, 0.3);
-  opacity: 0.8;
-}
 .hover-tooltip-tone {
   margin-left: 6px;
   font-size: 10px;
   opacity: 0.75;
   letter-spacing: 0.04em;
-}
-/* Onboarding: the user's own API key */
-.onboarding-keyform {
-  margin: 14px 0 6px;
-  max-width: 520px;
-}
-.onboarding-keylabel {
-  display: block;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.7;
-  margin-bottom: 6px;
-}
-.onboarding-keyrow {
-  display: flex;
-  gap: 8px;
-}
-.onboarding-input {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  background: rgba(0, 0, 0, 0.25);
-  color: inherit;
-  font: inherit;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.onboarding-save {
-  padding: 8px 14px;
-  border-radius: 6px;
-  border: 1px solid rgba(79, 195, 247, 0.6);
-  background: rgba(79, 195, 247, 0.15);
-  color: #4fc3f7;
-  font: inherit;
-  cursor: pointer;
-}
-.onboarding-save:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.onboarding-keystatus,
-.onboarding-keynote {
-  margin-top: 8px;
-  font-size: 12px;
-  opacity: 0.75;
-}
-.onboarding-forget {
-  margin-left: 6px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  background: transparent;
-  color: inherit;
-  font-size: 11px;
-  cursor: pointer;
 }
 
 // Chart: y-axis labels | plot area (gridlines + svg lines), x-axis below
@@ -5482,11 +5064,6 @@ export default {
   padding: 1px 4px;
   border-radius: 4px;
   background: rgba(128, 128, 128, 0.2);
-}
-.onboarding-error {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #e57373;
 }
 // Refresh lives in the banner's top-right corner
 .onboarding-refresh {
