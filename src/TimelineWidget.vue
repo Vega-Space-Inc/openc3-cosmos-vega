@@ -344,7 +344,7 @@
               <v-list-item @click="startTour(true)">
                 <v-list-item-title>Show the tour again</v-list-item-title>
               </v-list-item>
-              <v-list-item>
+              <v-list-item class="settings-item">
                 <v-switch
                   v-model="use24h"
                   class="settings-switch"
@@ -4677,8 +4677,11 @@ export default {
   text-decoration: underline;
 }
 .settings-switch {
-  margin: 4px 0;
+  margin: 4px 0 4px 6px; /* the thumb overhangs the track on the left */
   min-height: 32px;
+}
+.settings-item :deep(.v-list-item__content) {
+  overflow: visible;
 }
 /* ---- Onboarding tour (teleported to <body>) ---- */
 .tour-layer {
