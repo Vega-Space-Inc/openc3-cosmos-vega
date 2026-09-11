@@ -30,10 +30,13 @@ Any non-2xx response from any command is routed to `VEGA ERROR_RESPONSE`
 instead of the success packet: `HTTP_STATUS` carries the code (401 = bad or
 missing key, 403 = no approved access to `vega_org_id`, 404 = unknown org or
 no data in range, 429 = rate limited) and `BODY` the raw, unparsed response
-(Vega returns HTML for some errors). `HTTP_STATUS` on every packet has limits
-so anything outside 2xx shows red, `FORECASTING_SUMMARY RUN_STALE` shows
-`OK` (green) / `STALE` (yellow), and `FIRST_SAT_DAY_MAX_SEVERITY` is coloured
-low / medium / high. See `targets/VEGA/screens/status.txt` for a ready-made
+(Vega returns HTML for some errors). `FORECASTING_SUMMARY RUN_STALE` reads
+`OK` / `STALE` and `FIRST_SAT_DAY_MAX_SEVERITY` low / medium / high as named
+states. No packet carries COSMOS limits or state colours - the Timeline
+widget is the monitoring surface, and limits would raise a notification on
+every response transition (a high forecast day, a 5xx during a Vega
+deploy). Add `LIMITS` in your own copy of `tlm.txt` if you want the
+alarms. See `targets/VEGA/screens/status.txt` for a ready-made
 screen, or add the items to Telemetry Grapher / Packet Viewer.
 
 Decommutated command and telemetry records are retained for 30 days
