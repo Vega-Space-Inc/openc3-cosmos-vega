@@ -289,41 +289,45 @@
                 </v-list-item>
                 <v-divider />
               </template>
-              <v-list-item
-                :href="vegaHeatmapUrl"
-                target="_blank"
-                rel="noopener"
-              >
-                <v-list-item-title>View Heatmap</v-list-item-title>
-              </v-list-item>
-              <v-divider />
-              <v-list-item
-                :href="vegaGroundStationsUrl"
-                target="_blank"
-                rel="noopener"
-              >
-                <v-list-item-title>Edit Ground Stations</v-list-item-title>
-              </v-list-item>
-              <v-list-item
-                :href="vegaSatellitesUrl"
-                target="_blank"
-                rel="noopener"
-              >
-                <v-list-item-title>Edit Satellites</v-list-item-title>
-              </v-list-item>
-              <v-list-item
-                :href="VEGA_API_KEYS_URL"
-                target="_blank"
-                rel="noopener"
-              >
-                <v-list-item-title>API Settings</v-list-item-title>
-              </v-list-item>
-              <v-divider />
+              <!-- Links into the Vega app: for people with an account, so
+                   not in demo mode -->
+              <template v-if="!demoMode">
+                <v-list-item
+                  :href="vegaHeatmapUrl"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <v-list-item-title>View Heatmap</v-list-item-title>
+                </v-list-item>
+                <v-divider />
+                <v-list-item
+                  :href="vegaGroundStationsUrl"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <v-list-item-title>Edit Ground Stations</v-list-item-title>
+                </v-list-item>
+                <v-list-item
+                  :href="vegaSatellitesUrl"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <v-list-item-title>Edit Satellites</v-list-item-title>
+                </v-list-item>
+                <v-list-item
+                  :href="VEGA_API_KEYS_URL"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <v-list-item-title>API Settings</v-list-item-title>
+                </v-list-item>
+                <v-divider />
+              </template>
               <v-list-item @click="showKeyDialog = true">
                 <v-list-item-title>{{
                   savedApiKey
                     ? 'Change your Vega API key…'
-                    : 'Connect your Vega API key…'
+                    : 'Connect your Vega account…'
                 }}</v-list-item-title>
               </v-list-item>
               <v-list-item v-if="savedApiKey" @click="forgetApiKey">
@@ -335,6 +339,7 @@
               <v-list-item>
                 <v-switch
                   v-model="use24h"
+                  class="settings-switch"
                   label="24-hour time"
                   density="compact"
                   hide-details
@@ -4388,6 +4393,10 @@ export default {
   opacity: 1;
   color: #4fc3f7;
   text-decoration: underline;
+}
+.settings-switch {
+  margin: 4px 0;
+  min-height: 32px;
 }
 .build-stamp {
   font-size: 11px;
