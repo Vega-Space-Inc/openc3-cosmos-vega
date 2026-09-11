@@ -1098,41 +1098,47 @@
           <span class="tour-corner bl" />
           <span class="tour-corner br" />
         </div>
-        <div
+        <v-card
           ref="tourCard"
-          class="tour-card"
+          class="tour-card asi-info"
           :style="{
             top: tourCardPos.top + 'px',
             left: tourCardPos.left + 'px',
           }"
           aria-label="Widget tour"
         >
-          <div :key="tourStep.id" class="tour-card-body">
+          <v-card-title class="asi-info-title tour-title-row">
+            <span>{{ tourStep.title }}</span>
             <span class="tour-count"
               >{{ tourIndex + 1 }} / {{ tourStepIds.length }}</span
             >
-            <h3 class="tour-title">{{ tourStep.title }}</h3>
-            <p class="tour-text">{{ tourStep.body }}</p>
-          </div>
-          <div class="tour-actions">
-            <button type="button" class="tour-skip" @click="finishTour">
+          </v-card-title>
+          <v-card-text :key="tourStep.id" class="asi-info-body tour-text">
+            {{ tourStep.body }}
+          </v-card-text>
+          <v-card-actions>
+            <v-btn variant="text" size="small" @click="finishTour">
               Skip tour
-            </button>
-            <span class="tour-actions-right">
-              <button
-                v-if="tourIndex > 0"
-                type="button"
-                class="tour-btn"
-                @click="tourGo(-1)"
-              >
-                Back
-              </button>
-              <button type="button" class="tour-btn primary" @click="tourGo(1)">
-                {{ tourIndex >= tourStepIds.length - 1 ? 'Done' : 'Next' }}
-              </button>
-            </span>
-          </div>
-        </div>
+            </v-btn>
+            <v-spacer />
+            <v-btn
+              v-if="tourIndex > 0"
+              variant="outlined"
+              size="small"
+              @click="tourGo(-1)"
+            >
+              Back
+            </v-btn>
+            <v-btn
+              color="primary"
+              variant="flat"
+              size="small"
+              @click="tourGo(1)"
+            >
+              {{ tourIndex >= tourStepIds.length - 1 ? 'Done' : 'Next' }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
       </div>
     </teleport>
   </div>
@@ -2901,8 +2907,9 @@ export default {
       }
       // Card: below, then right, then left, then above - first that fits,
       // clamped to the viewport as a last resort.
-      const card = this.$refs.tourCard
-      const ch = card ? card.offsetHeight : 190
+      const cardRef = this.$refs.tourCard
+      const cardEl = cardRef && (cardRef.$el || cardRef)
+      const ch = cardEl && cardEl.offsetHeight ? cardEl.offsetHeight : 190
       const centeredLeft = r.left + r.width / 2 - TOUR_CARD_W / 2
       const candidates = [
         { top: r.top + r.height + TOUR_GAP, left: centeredLeft },
@@ -4675,11 +4682,13 @@ export default {
   position: absolute;
   inset: 0;
 }
-/* The dimming is the frame's giant shadow, so the target stays bright */
+/* The dimming is the frame's giant shadow, so the target stays bright.
+   Colours come from the COSMOS theme, like the widget's dialogs. */
 .tour-frame {
   position: absolute;
-  color: #4fc3f7;
-  box-shadow: 0 0 0 100vmax rgba(10, 16, 26, 0.85);
+  color: rgb(var(--v-theme-secondary));
+  box-shadow: 0 0 0 100vmax rgba(var(--v-theme-background), 0.82);
+  border-radius: 4px;
   pointer-events: none;
   transition:
     top 0.3s ease,
@@ -4691,7 +4700,8 @@ export default {
   position: absolute;
   inset: 0;
   border: 1px dashed currentColor;
-  opacity: 0.4;
+  border-radius: 4px;
+  opacity: 0.45;
 }
 .tour-corner {
   position: absolute;
@@ -4726,92 +4736,26 @@ export default {
   border-right-width: 2px;
 }
 .tour-card {
-  position: absolute;
+  position: absolute !important;
   width: 320px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 4px;
-  background: #101826;
-  color: #e6ebf2;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   transition:
     top 0.3s ease,
     left 0.3s ease;
 }
-.tour-card-body {
+.tour-title-row {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }
 .tour-count {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 9px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  opacity: 0.45;
-}
-.tour-title {
-  margin: 4px 0 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-weight: 400;
+  opacity: 0.55;
+  white-space: nowrap;
 }
 .tour-text {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  opacity: 0.75;
-}
-.tour-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.tour-actions-right {
-  display: inline-flex;
-  gap: 8px;
-}
-.tour-skip {
-  border: none;
-  background: transparent;
-  color: inherit;
-  opacity: 0.45;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 9.5px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-.tour-skip:hover {
-  opacity: 0.85;
-}
-.tour-btn {
-  padding: 6px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  opacity: 0.8;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 9.5px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-.tour-btn.primary {
-  border-color: rgba(79, 195, 247, 0.6);
-  background: rgba(79, 195, 247, 0.12);
-  opacity: 1;
-}
-.tour-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
+  padding-top: 0 !important;
 }
 .build-stamp {
   font-size: 11px;
