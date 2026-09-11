@@ -949,12 +949,37 @@
                   {{ saveKeyError }}
                 </div>
               </form>
-              <p class="asi-info-note">
-                No key yet? Create one at
-                <a :href="VEGA_API_KEYS_URL" target="_blank" rel="noopener"
-                  >app.vega.space/settings/api-keys</a
-                >.
-              </p>
+              <div class="asi-info-note keydlg-nokey">
+                <p class="keydlg-nokey-text">No key yet?</p>
+                <div class="keydlg-ctas">
+                  <v-btn
+                    color="primary"
+                    variant="flat"
+                    size="small"
+                    :href="VEGA_SIGNUP_URL"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    Sign up
+                  </v-btn>
+                  <v-btn
+                    variant="outlined"
+                    size="small"
+                    :href="VEGA_SIGNIN_URL"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    Sign in
+                  </v-btn>
+                </div>
+                <a
+                  class="keydlg-apikeys"
+                  :href="VEGA_API_KEYS_URL"
+                  target="_blank"
+                  rel="noopener"
+                  >API keys →</a
+                >
+              </div>
             </v-card-text>
             <v-card-actions>
               <v-spacer />
@@ -1378,6 +1403,7 @@ function shortErrorBody(body) {
 }
 const VEGA_API_KEYS_URL = 'https://app.vega.space/settings/api-keys'
 const VEGA_SIGNUP_URL = 'https://app.vega.space/signup'
+const VEGA_SIGNIN_URL = 'https://app.vega.space/login'
 const VEGA_APP_URL = 'https://app.vega.space'
 // The user's own Vega API key is kept in this browser only. It is never
 // written to a COSMOS setting (get_setting needs no more than viewer rights,
@@ -1594,6 +1620,7 @@ export default {
       laneWidthPx: 0,
       VEGA_API_KEYS_URL,
       VEGA_SIGNUP_URL,
+      VEGA_SIGNIN_URL,
       // true once we've classified the last APPROVED_ORGS response as not a
       // working connection - shows the setup/onboarding state instead of the
       // normal pickers/chart.
@@ -4848,6 +4875,23 @@ export default {
 }
 .asi-info-body code {
   font-size: 12px;
+}
+.keydlg-nokey-text {
+  margin: 0 0 10px;
+}
+.keydlg-ctas {
+  display: flex;
+  gap: 8px;
+}
+.keydlg-apikeys {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #4fc3f7;
+  text-decoration: none;
+}
+.keydlg-apikeys:hover {
+  text-decoration: underline;
 }
 .asi-info-note {
   margin-top: 12px;
