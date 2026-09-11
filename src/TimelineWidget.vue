@@ -156,11 +156,16 @@
             demoOrgName ? ` (${demoOrgName})` : ''
           }}</span
         >
-        <button type="button" class="demo-cta" @click="showKeyDialog = true">
+        <button
+          type="button"
+          class="demo-cta"
+          data-tour="connect"
+          @click="showKeyDialog = true"
+        >
           Connect your own data →
         </button>
       </div>
-      <div class="controls-col">
+      <div class="controls-col" data-tour="pickers">
         <div class="controls-row">
           <div class="ctl-wrap" :class="{ busy }">
             <v-select
@@ -336,6 +341,9 @@
                 >
               </v-list-item>
               <v-divider />
+              <v-list-item @click="startTour(true)">
+                <v-list-item-title>Show the tour again</v-list-item-title>
+              </v-list-item>
               <v-list-item>
                 <v-switch
                   v-model="use24h"
@@ -542,7 +550,11 @@
               background: bandTint(g.band, 0.09),
             }"
           />
-          <div class="lanes-labels" :style="{ height: gridHeightPx + 'px' }">
+          <div
+            class="lanes-labels"
+            data-tour="bands"
+            :style="{ height: gridHeightPx + 'px' }"
+          >
             <!-- Band header: one bordered, tinted block per band spanning
                  that band's rows (one row per selected station) -->
             <div
@@ -733,6 +745,7 @@
                 v-for="span in allSpans"
                 :key="span.id"
                 class="pass-cell"
+                :data-tour="span.id === tourSpanId ? 'chart' : null"
                 :style="spanStyle(span)"
                 :class="{
                   expanded: expandedBand === span.key,
@@ -1064,6 +1077,64 @@
         </v-dialog>
       </div>
     </template>
+    <!-- Onboarding tour: the page dims except for a spotlighted region,
+         with a card of copy beside it - the same shape as the Vega app's
+         forecast tour. Steps whose target isn't on screen are skipped. -->
+    <teleport to="body">
+      <div v-if="tourActive && tourRect" class="tour-layer">
+        <div class="tour-shield" />
+        <div
+          class="tour-frame"
+          :style="{
+            top: tourRect.top + 'px',
+            left: tourRect.left + 'px',
+            width: tourRect.width + 'px',
+            height: tourRect.height + 'px',
+          }"
+        >
+          <span class="tour-dash" />
+          <span class="tour-corner tl" />
+          <span class="tour-corner tr" />
+          <span class="tour-corner bl" />
+          <span class="tour-corner br" />
+        </div>
+        <div
+          ref="tourCard"
+          class="tour-card"
+          :style="{
+            top: tourCardPos.top + 'px',
+            left: tourCardPos.left + 'px',
+          }"
+          aria-label="Widget tour"
+        >
+          <div :key="tourStep.id" class="tour-card-body">
+            <span class="tour-count"
+              >{{ tourIndex + 1 }} / {{ tourStepIds.length }}</span
+            >
+            <h3 class="tour-title">{{ tourStep.title }}</h3>
+            <p class="tour-text">{{ tourStep.body }}</p>
+          </div>
+          <div class="tour-actions">
+            <button type="button" class="tour-skip" @click="finishTour">
+              Skip tour
+            </button>
+            <span class="tour-actions-right">
+              <button
+                v-if="tourIndex > 0"
+                type="button"
+                class="tour-btn"
+                @click="tourGo(-1)"
+              >
+                Back
+              </button>
+              <button type="button" class="tour-btn primary" @click="tourGo(1)">
+                {{ tourIndex >= tourStepIds.length - 1 ? 'Done' : 'Next' }}
+              </button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -1307,6 +1378,34 @@ const VEGA_APP_URL = 'https://app.vega.space'
 // so that would expose it to every user) - see authOverride().
 const API_KEY_LS_KEY = 'vega_widget_api_key'
 const SIZE_LS_KEY = 'vega_widget_size'
+// Onboarding tour - shown once per browser, replayable from the menu.
+const TOUR_LS_KEY = 'vega_widget_tour_complete'
+const TOUR_STEPS = [
+  {
+    id: 'bands',
+    title: 'Frequency bands',
+    body: "Each row is one of this satellite's bands. With several ground stations selected, a band becomes a group with one row per station.",
+  },
+  {
+    id: 'chart',
+    title: 'Read a pass',
+    body: "Each box is one pass over the station. Every bar is a minute: its height and colour are how many same-band satellites share the station's sky, relative to the band's busiest minute. Hover for the exact count and time, click a box to open it, or drag across the chart to zoom.",
+  },
+  {
+    id: 'pickers',
+    title: 'Pick what to forecast',
+    body: 'Choose the satellite, one or more ground stations, and which bands to show. Yesterday, Today and Tomorrow, and the calendar, move through the three-day forecast and the measured history.',
+  },
+  {
+    id: 'connect',
+    title: 'Connect your own data',
+    body: "You are looking at Vega's demo satellites. Connect a Vega API key here to see your organization's satellites and ground stations.",
+  },
+]
+const TOUR_CARD_W = 320
+const TOUR_PAD = 6
+const TOUR_GAP = 20
+const TOUR_MARGIN = 16
 const TIME_24H_LS_KEY = 'vega_widget_24h'
 function readStoredFlag(key, fallback) {
   try {
@@ -1467,6 +1566,13 @@ export default {
       // Rows for bands with nothing in the loaded window are hidden until
       // the user asks for them.
       showEmptyBands: false,
+      // Onboarding tour state (see TOUR_STEPS)
+      tourActive: false,
+      tourStepIds: [],
+      tourIndex: 0,
+      tourRect: null,
+      tourCardPos: { top: 0, left: 0 },
+      tourDone: readStoredFlag(TOUR_LS_KEY, false),
       // Size the user dragged the widget to ({w, h} in CSS px), or null for
       // automatic. Remembered in this browser.
       userSize: readStoredSize(),
@@ -2420,6 +2526,19 @@ export default {
         (this.laneWidthPx || 1200) / Math.max(1, this.viewEnd - this.viewStart)
       return Math.abs(slot.cx - c) * pxPerUnit <= 5
     },
+    tourStep() {
+      const id = this.tourStepIds[this.tourIndex]
+      return TOUR_STEPS.find((st) => st.id === id) || TOUR_STEPS[0]
+    },
+    // The first box with bars in it - what the 'Read a pass' step frames.
+    tourSpanId() {
+      for (const key of this.rowKeys) {
+        for (const sp of this.rowSpans[key] || []) {
+          if (this.cellStatus[sp.id] === 'data') return sp.id
+        }
+      }
+      return null
+    },
     hoverTimeLabel() {
       const slot = this.hoverSlot
       if (!slot) return ''
@@ -2632,6 +2751,12 @@ export default {
       },
       deep: true,
     },
+    // First chart drawn in a browser that hasn't seen the tour: run it.
+    loading(now, before) {
+      if (before && !now && this.hasLoadedData && !this.tourDone) {
+        setTimeout(() => this.startTour(), 400)
+      }
+    },
     use24h(v) {
       try {
         localStorage.setItem(TIME_24H_LS_KEY, v ? '1' : '0')
@@ -2711,6 +2836,8 @@ export default {
     this.observeLaneWidth()
   },
   beforeUnmount() {
+    window.removeEventListener('resize', this.tourMeasure)
+    window.removeEventListener('scroll', this.tourMeasure, true)
     clearInterval(this._clockTimer)
     if (this._laneResizeObserver) {
       this._laneResizeObserver.disconnect()
@@ -2729,6 +2856,97 @@ export default {
     }
   },
   methods: {
+    // ---- onboarding tour
+    tourTargetRect(id) {
+      const el = this.$el && this.$el.querySelector(`[data-tour="${id}"]`)
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      if (!r.width || !r.height) return null
+      return { top: r.top, left: r.left, width: r.width, height: r.height }
+    },
+    startTour(force = false) {
+      if (!force && (this.tourDone || this.tourActive)) return
+      this.$nextTick(() => {
+        this.tourStepIds = TOUR_STEPS.map((st) => st.id).filter((id) =>
+          this.tourTargetRect(id),
+        )
+        if (!this.tourStepIds.length) return
+        this.tourIndex = 0
+        this.tourActive = true
+        this.tourMeasure()
+        window.addEventListener('resize', this.tourMeasure)
+        window.addEventListener('scroll', this.tourMeasure, true)
+      })
+    },
+    tourMeasure() {
+      if (!this.tourActive) return
+      const id = this.tourStepIds[this.tourIndex]
+      const r = this.tourTargetRect(id)
+      if (!r) {
+        this.tourRect = null
+        return
+      }
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      // Spotlight frame, kept on screen
+      this.tourRect = {
+        top: Math.max(2, r.top - TOUR_PAD),
+        left: Math.max(2, r.left - TOUR_PAD),
+        width:
+          Math.min(vw - 2, r.left + r.width + TOUR_PAD) -
+          Math.max(2, r.left - TOUR_PAD),
+        height:
+          Math.min(vh - 2, r.top + r.height + TOUR_PAD) -
+          Math.max(2, r.top - TOUR_PAD),
+      }
+      // Card: below, then right, then left, then above - first that fits,
+      // clamped to the viewport as a last resort.
+      const card = this.$refs.tourCard
+      const ch = card ? card.offsetHeight : 190
+      const centeredLeft = r.left + r.width / 2 - TOUR_CARD_W / 2
+      const candidates = [
+        { top: r.top + r.height + TOUR_GAP, left: centeredLeft },
+        { top: r.top + 12, left: r.left + r.width + TOUR_GAP },
+        { top: r.top + 12, left: r.left - TOUR_CARD_W - TOUR_GAP },
+        { top: r.top - ch - TOUR_GAP, left: centeredLeft },
+      ]
+      const fits = (c) =>
+        c.top >= TOUR_MARGIN &&
+        c.left >= TOUR_MARGIN &&
+        c.top + ch <= vh - TOUR_MARGIN &&
+        c.left + TOUR_CARD_W <= vw - TOUR_MARGIN
+      const pick = candidates.find(fits) || candidates[0]
+      const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), Math.max(lo, hi))
+      this.tourCardPos = {
+        top: clamp(pick.top, TOUR_MARGIN, vh - ch - TOUR_MARGIN),
+        left: clamp(pick.left, TOUR_MARGIN, vw - TOUR_CARD_W - TOUR_MARGIN),
+      }
+    },
+    tourGo(delta) {
+      const next = this.tourIndex + delta
+      if (next >= this.tourStepIds.length) {
+        this.finishTour()
+        return
+      }
+      this.tourIndex = Math.max(0, next)
+      // Two passes: the card's height for the new copy feeds placement
+      this.$nextTick(() => {
+        this.tourMeasure()
+        this.$nextTick(this.tourMeasure)
+      })
+    },
+    finishTour() {
+      this.tourActive = false
+      this.tourRect = null
+      this.tourDone = true
+      window.removeEventListener('resize', this.tourMeasure)
+      window.removeEventListener('scroll', this.tourMeasure, true)
+      try {
+        localStorage.setItem(TOUR_LS_KEY, '1')
+      } catch (e) {
+        // private mode: the tour just shows again next time
+      }
+    },
     rowHeightPx(band) {
       return this.rowHeights[band] || (this.multiStation ? 24 : 36)
     },
@@ -4437,6 +4655,163 @@ export default {
 .settings-switch {
   margin: 4px 0;
   min-height: 32px;
+}
+/* ---- Onboarding tour (teleported to <body>) ---- */
+.tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  animation: tour-fade 0.3s ease;
+}
+@keyframes tour-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.tour-shield {
+  position: absolute;
+  inset: 0;
+}
+/* The dimming is the frame's giant shadow, so the target stays bright */
+.tour-frame {
+  position: absolute;
+  color: #4fc3f7;
+  box-shadow: 0 0 0 100vmax rgba(10, 16, 26, 0.85);
+  pointer-events: none;
+  transition:
+    top 0.3s ease,
+    left 0.3s ease,
+    width 0.3s ease,
+    height 0.3s ease;
+}
+.tour-dash {
+  position: absolute;
+  inset: 0;
+  border: 1px dashed currentColor;
+  opacity: 0.4;
+}
+.tour-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: currentColor;
+  border-style: solid;
+  border-width: 0;
+}
+.tour-corner.tl {
+  top: -1px;
+  left: -1px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+.tour-corner.tr {
+  top: -1px;
+  right: -1px;
+  border-top-width: 2px;
+  border-right-width: 2px;
+}
+.tour-corner.bl {
+  bottom: -1px;
+  left: -1px;
+  border-bottom-width: 2px;
+  border-left-width: 2px;
+}
+.tour-corner.br {
+  bottom: -1px;
+  right: -1px;
+  border-bottom-width: 2px;
+  border-right-width: 2px;
+}
+.tour-card {
+  position: absolute;
+  width: 320px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  background: #101826;
+  color: #e6ebf2;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  transition:
+    top 0.3s ease,
+    left 0.3s ease;
+}
+.tour-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tour-count {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.45;
+}
+.tour-title {
+  margin: 4px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.tour-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  opacity: 0.75;
+}
+.tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tour-actions-right {
+  display: inline-flex;
+  gap: 8px;
+}
+.tour-skip {
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.45;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.tour-skip:hover {
+  opacity: 0.85;
+}
+.tour-btn {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.tour-btn.primary {
+  border-color: rgba(79, 195, 247, 0.6);
+  background: rgba(79, 195, 247, 0.12);
+  opacity: 1;
+}
+.tour-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 .build-stamp {
   font-size: 11px;
