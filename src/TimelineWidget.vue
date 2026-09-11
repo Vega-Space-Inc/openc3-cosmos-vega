@@ -961,52 +961,92 @@
                 risk that another satellite transmitting in the same frequency
                 band is in your ground station's view at the same time as the
                 satellite you are tracking, so its signal can land in your
-                receiver alongside the one you want.
+                receiver alongside the one you want. Vega models all 15,000+
+                active satellites - their orbits, their frequencies, their beam
+                patterns - and forecasts where and when transmissions will
+                overlap, up to three days ahead.
               </p>
-              <h4>How Vega calculates it</h4>
+
+              <h4>How the forecast is built</h4>
               <ol>
                 <li>
-                  <strong>Visibility.</strong> Vega propagates the orbit of the
-                  selected satellite and works out, minute by minute, when it is
-                  above the horizon from the selected ground station. Those
-                  minutes are the passes you see as boxes; a satellite that is
-                  always in view (GEO) gives one box for the whole day.
+                  <strong>Orbital tracking.</strong> Two-Line Element sets from
+                  authoritative sources, refreshed daily, are propagated forward
+                  with industry-standard orbital mechanics that account for
+                  atmospheric drag, Earth's oblateness (J2) and solar radiation
+                  pressure.
                 </li>
                 <li>
-                  <strong>Candidates.</strong> From the catalog of tracked
-                  satellites it selects the ones whose transmit frequencies
-                  overlap a band the selected satellite uses. Satellites in
-                  other bands are ignored.
+                  <strong>Frequency conflict identification.</strong> Only
+                  satellites operating in overlapping bands can interfere.
+                  Satellites are mapped to their frequency allocations from
+                  regulatory databases and public filings, and only confirmed
+                  overlaps or recorded usages are flagged as potential
+                  interferers.
                 </li>
                 <li>
-                  <strong>Overlap.</strong> For every covered minute and every
-                  band, it counts how many of those candidates are
-                  simultaneously in view of the station. That count is the
-                  <strong>interferer count</strong> - the number behind each
-                  bar.
+                  <strong>Coverage analysis.</strong> Each satellite's field of
+                  regard is modelled as a cone tangent to Earth's surface over
+                  an equal-area HEALPix grid at roughly 100 km resolution, for
+                  every minute of the three-day window - 4,320 epochs per
+                  analysis.
+                </li>
+                <li>
+                  <strong>Interference event detection.</strong> For each
+                  minute, your satellite's footprint and every potential
+                  interferer's footprint are computed and their intersections
+                  found - the areas where both are in view at once.
+                </li>
+                <li>
+                  <strong>Aggregation per band.</strong> The resulting matrices
+                  (epoch × interfering satellite) are combined per operating
+                  band into a per-cell intensity for every epoch. The count
+                  behind each bar here is that intensity read at your ground
+                  station's cell: how many same-band satellites share its sky
+                  that minute.
                 </li>
               </ol>
-              <h4>Reading the chart</h4>
+
+              <h4>Reading this chart</h4>
               <ul>
                 <li>
                   Each bar is one minute (or a few minutes when the view is too
                   narrow to show them individually - the tooltip then says
-                  which). Its height and colour are that minute's interferer
-                  count relative to the band's busiest minute in the loaded day,
-                  from green (quiet) through amber to red (the peak). The
-                  tooltip gives the actual count.
+                  which). Height and colour are that minute's count relative to
+                  the band's busiest minute in the loaded day, from green
+                  (quiet) through amber to red (the peak). The tooltip gives the
+                  actual count.
                 </li>
                 <li>
-                  Vega's own severity scale is absolute: a minute with 1 or more
-                  interferers is a <em>warning</em> and 10 or more is
-                  <em>high</em>. The COSMOS limits on the
-                  <code>FORECASTING_SUMMARY</code> packet use that scale.
+                  A flat row of green stubs means the band was analysed and
+                  found clear. An empty box means there is no reading for that
+                  band in that pass.
                 </li>
                 <li>
-                  Today and the next two days come from the latest forecast run
-                  (refreshed several times a day); earlier days are the measured
-                  record for that day. The chart only shows time when the
-                  satellite is in view - gaps between passes are removed.
+                  Today and the next two days come from the latest forecast run;
+                  earlier days are the measured record. Only time when the
+                  satellite is in view of the station is shown - the gaps
+                  between passes are removed.
+                </li>
+              </ul>
+
+              <h4>Validation and limits</h4>
+              <ul>
+                <li>
+                  Orbital data is refreshed daily; predictions degrade beyond
+                  three days, which is why the forecast stops there.
+                </li>
+                <li>
+                  Frequency mappings carry confidence levels based on the
+                  quality of their source.
+                </li>
+                <li>
+                  Telemetry and ground readings feed a learning layer that
+                  refines the models and confidence scoring over time.
+                </li>
+                <li>
+                  Some things cannot be predicted: solar storms, unannounced
+                  satellite manoeuvres and intentional jamming.
                 </li>
               </ul>
               <p class="asi-info-note">
