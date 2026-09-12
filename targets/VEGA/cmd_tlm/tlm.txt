@@ -30,7 +30,7 @@ TELEMETRY <%= target_name %> HEALTH BIG_ENDIAN "Vega API health check (no auth r
 # of the buffer). HTTP_STATUS tells you which kind of error it was.
 TELEMETRY <%= target_name %> ERROR_RESPONSE BIG_ENDIAN "Non-2xx response from any Vega endpoint (bad/expired key, no approved org access, rate limit, not found, server error). Raw body, see HTTP_STATUS for the code."
   ACCESSOR HttpAccessor BinaryAccessor
-  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, e.g. 401 = bad/expired VEGA_API_KEY secret, 403 = no approved access to vega_org_id, 404 = unknown org / no data in range, 429 = rate limited, 5xx = Vega server error"
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, e.g. 401 = bad/expired VEGA_API_KEY secret, 404 = unknown org or no approved access to it for this key, or no data in range, 429 = rate limited, 5xx = Vega server error"
   APPEND_ITEM BODY 0 STRING "Raw response body (HTML or JSON, unparsed)"
 
 TELEMETRY <%= target_name %> DEMO_KEY BIG_ENDIAN "Vega's public demo API key: read-only access to the Demo Org, served by Vega so it can be rotated without a plugin release. Nothing secret - it is what any visitor gets."
@@ -59,7 +59,7 @@ TELEMETRY <%= target_name %> APPROVED_ORGS BIG_ENDIAN "Organizations this API ke
 
 TELEMETRY <%= target_name %> WORKSPACE BIG_ENDIAN "Satellites and ground stations for the requested org - first-record snapshot"
   ACCESSOR HttpAccessor JsonAccessor
-  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 404 means the org is unknown or not approved for this key"
   APPEND_ITEM ORG_ID 32 UINT "Organization id echoed back - lets a caller confirm this response is for the org it asked about (e.g. via an HTTP_PATH override), since periodic polls to the default vega_org_id keep updating this same packet in the background"
     KEY $.data.organization.id
   APPEND_ITEM ORG_NAME 256 STRING "Organization name"
@@ -87,7 +87,7 @@ TELEMETRY <%= target_name %> WORKSPACE BIG_ENDIAN "Satellites and ground station
 
 TELEMETRY <%= target_name %> FORECASTING_SUMMARY BIG_ENDIAN "Interference/coverage forecast summary for the requested org - forecast run status plus the first satellite's most recent day"
   ACCESSOR HttpAccessor JsonAccessor
-  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 404 means the org is unknown or not approved for this key"
   APPEND_ITEM ORG_ID 32 UINT "Organization id echoed back - lets a caller confirm this response is for the org it asked about (e.g. via an HTTP_PATH override), since periodic polls to the default vega_org_id keep updating this same packet in the background"
     KEY $.data.organization.id
   APPEND_ITEM SATELLITES_JSON 0 ARRAY "Full satellites array (id, name, norad, bands, forecast_available, latest_run_id, last_forecast_at, days, etc) - used by the ForecastTimeline widget to sort/disable satellites in its picker by forecast availability"
@@ -122,7 +122,7 @@ TELEMETRY <%= target_name %> FORECASTING_SUMMARY BIG_ENDIAN "Interference/covera
 # same data the Vega web app itself uses for this view.
 TELEMETRY <%= target_name %> DAY_DETAIL BIG_ENDIAN "Interference windows for one satellite+ground_station+day"
   ACCESSOR HttpAccessor JsonAccessor
-  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org"
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 404 means the org is unknown or not approved for this key"
   APPEND_ITEM SATELLITE_ID 32 UINT "Satellite id echoed back"
     KEY $.data.satellite.id
   APPEND_ITEM SATELLITE_NAME 256 STRING "Satellite name echoed back"
@@ -146,7 +146,7 @@ TELEMETRY <%= target_name %> DAY_DETAIL BIG_ENDIAN "Interference windows for one
 
 TELEMETRY <%= target_name %> HISTORY BIG_ENDIAN "Measured historical interference for one satellite+ground_station over a time range"
   ACCESSOR HttpAccessor JsonAccessor
-  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 403 means no approved access to this org, 404 means no coverage runs overlap the requested range"
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, 404 means the org is unknown or not approved for this key, or no coverage runs overlap the requested range"
   APPEND_ITEM SATELLITE_ID 32 UINT "Satellite id echoed back"
     KEY $.data.satellite.id
   APPEND_ITEM SATELLITE_NAME 256 STRING "Satellite name echoed back"

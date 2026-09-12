@@ -39,7 +39,7 @@ requests them per satellite, ground station and day as the user browses).
 
 Any non-2xx response from any command is routed to `VEGA ERROR_RESPONSE`
 instead of the success packet: `HTTP_STATUS` carries the code (401 = bad or
-missing key, 403 = no approved access to `vega_org_id`, 404 = unknown org or
+missing key, 404 = `vega_org_id` unknown or not approved for this key, or
 no data in range, 429 = rate limited) and `BODY` the raw, unparsed response
 (Vega returns HTML for some errors). `FORECASTING_SUMMARY RUN_STALE` reads
 `OK` / `STALE` and `FIRST_SAT_DAY_MAX_SEVERITY` low / medium / high as named
