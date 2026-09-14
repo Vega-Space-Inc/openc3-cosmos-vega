@@ -101,6 +101,21 @@ SECRET ENV VEGA_API_KEY VEGA_API_KEY
 
 A key entered in the widget always wins for that request.
 
+### Limits and key lifetime
+
+Each key may make 100 requests per minute
+([rate limits](https://docs.vega.space/api-reference/rate-limits)). The
+widget's per-user key and the shared secret are separate budgets. With the
+default variables the background polls use about one request a minute, and
+the widget paces its own requests, so the limit only matters if several
+operators share one key from one instance. A `429` lands in `ERROR_RESPONSE`.
+
+Keys expire one year after creation and are revoked after 90 days unused
+(the polls keep the secret in use, so the yearly expiry is the one to plan
+for). An expired key shows as `401` in `ERROR_RESPONSE` and on the status
+screen: create a new key in the app, update the secret in **Admin → Secrets**,
+and restart the interface.
+
 ## Testing without waiting for real passes
 
 `targets/VEGA/procedures/procedure.rb` checks the shared-secret path
