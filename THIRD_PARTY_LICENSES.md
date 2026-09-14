@@ -1,4 +1,10 @@
-# Vega Plugin License
+# Third-Party Licenses
+
+The built Timeline widget (`tools/widgets/TimelineWidget/TimelineWidget.umd.min.js`, shipped in the gem) bundles `@openc3/js-common` from OpenC3, Inc., which is licensed under the OpenC3 Builder's License reproduced below. `@openc3/vue-common`, Vue, Vuetify, Pinia and vue-router are provided by COSMOS at runtime and are not bundled.
+
+---
+
+# OpenC3 Builder’s License
 
 ## Acceptance
 
@@ -12,8 +18,7 @@ The licensor grants you a non-exclusive, royalty-free, worldwide, non-sublicensa
 
 - You may not provide the software or its functionality to third parties as any part of a hosted or managed service.
 - You may not distribute any changes made to the software on a commercial basis.
-- You may not use the software, or any derivative of it, to access any service other than the licensor's, or to present another party's data as the licensor's.
-- You may not alter, remove, or obscure any licensing, copyright, or other notices of the licensor in the software. Any use of the licensor's trademarks is subject to applicable law.
+- You may not alter, remove, or obscure any licensing, copyright, or other notices of the licensor in the software. Any use of the licensor’s trademarks is subject to applicable law.
 
 ## Patents
 
@@ -25,11 +30,7 @@ You must ensure that anyone who gets a copy of any part of the software from you
 
 If you modify the software, you must include in any modified copies of the software prominent notices stating that you have modified the software.
 
-## Third-Party Software
-
-The software includes components from OpenC3, Inc. that are licensed separately under the OpenC3 Builder's License. Those components are identified, and their terms reproduced, in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Nothing in these terms grants you rights in those components beyond what their own license grants.
-
-## No Other Rights
+# No Other Rights
 
 These terms do not imply any licenses other than those expressly granted in these terms.
 
@@ -45,35 +46,35 @@ As far as the law allows, the software comes as is, without any warranty or cond
 
 By submitting a Contribution, you agree to the following terms:
 
-1. **Grant of License**: You hereby grant to Vega Space, Inc. a perpetual, irrevocable, worldwide, royalty-free, fully paid-up, non-exclusive, sublicensable, and transferable license to use, reproduce, prepare derivative works of, publicly display, publicly perform, distribute, sublicense, sell, and otherwise exploit your Contribution and any derivative works thereof, for any purpose whatsoever, without restriction or obligation to you.
+1. **Grant of License**: You hereby grant to OpenC3, Inc. a perpetual, irrevocable, worldwide, royalty-free, fully paid-up, non-exclusive, sublicensable, and transferable license to use, reproduce, prepare derivative works of, publicly display, publicly perform, distribute, sublicense, sell, and otherwise exploit your Contribution and any derivative works thereof, for any purpose whatsoever, without restriction or obligation to you.
 
-2. **Grant of Patent License**: You hereby grant to Vega Space, Inc. a perpetual, irrevocable, worldwide, royalty-free, fully paid-up, non-exclusive, sublicensable, and transferable patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer your Contribution, where such license applies only to those patent claims licensable by you that are necessarily infringed by your Contribution alone or by combination of your Contribution with the Software.
+2. **Grant of Patent License**: You hereby grant to OpenC3, Inc. a perpetual, irrevocable, worldwide, royalty-free, fully paid-up, non-exclusive, sublicensable, and transferable patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer your Contribution, where such license applies only to those patent claims licensable by you that are necessarily infringed by your Contribution alone or by combination of your Contribution with the Software.
 
 3. **Representation of Authority**: You represent that you are legally entitled to grant the above licenses. If your employer has rights to intellectual property you create, you represent that you have received permission to make the Contribution on behalf of your employer, or that your employer has waived such rights for your Contribution.
 
 4. **Representation of Originality**: You represent that each Contribution is your original creation and that you have the right to grant the licenses herein. You will identify any third-party licenses or restrictions associated with any part of your Contribution.
 
-5. **No Obligation**: You acknowledge that Vega Space, Inc. is under no obligation to accept, use, or include any Contribution.
+5. **No Obligation**: You acknowledge that OpenC3, Inc. is under no obligation to accept, use, or include any Contribution.
 
-6. **No Expectation of Compensation**: Contributions are provided voluntarily. You have no expectation of compensation, royalties, or other payment for any Contribution, regardless of how Vega Space, Inc. uses it.
+6. **No Expectation of Compensation**: Contributions are provided voluntarily. You have no expectation of compensation, royalties, or other payment for any Contribution, regardless of how OpenC3, Inc. uses it.
 
 ## Governing Law
 
-This license shall be governed by and construed in accordance with the laws of the State of [STATE OF INCORPORATION — counsel to confirm], without regard to its conflict of law provisions.
+This license shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of law provisions.
 
 ## Commercial Licensing and Contact Information
 
-This software may also be used under the terms of a commercial license purchased from Vega Space, Inc.
+This software may also be used under the terms of a commercial license purchased from OpenC3, Inc.
 
 For licensing inquiries, including requests for commercial licenses, please contact:
 
-tom@vega.space
+sales@openc3.com
 
 ## Definitions
 
 **Contribution** means any original work of authorship, including any modification or addition to existing work, that is submitted for inclusion in the Software. A Contribution is considered "submitted" when any form of electronic, verbal, or written communication is received by Licensor, including but not limited to communications on electronic mailing lists, source code control systems, issue tracking systems, and pull requests that are managed by or on behalf of Licensor for the purpose of discussing or improving the Software. Communications conspicuously marked "Not a Contribution" are excluded.
 
-The **licensor** is Vega Space, Inc., the entity offering these terms, and the **software** is the software the licensor makes available under these terms, including any portion of it.
+The **licensor** is the entity offering these terms, and the **software** is the software the licensor makes available under these terms, including any portion of it.
 
 **you** refers to the individual or entity agreeing to these terms.
 
@@ -87,4 +88,4 @@ The **licensor** is Vega Space, Inc., the entity offering these terms, and the *
 
 ## Attribution
 
-This license is based on the Elastic License 2.0, as modified by OpenC3, Inc. for the OpenC3 Builder's License, and further modified by Vega Space, Inc.
+This license is based on the Elastic License 2.0, modified by OpenC3, Inc.

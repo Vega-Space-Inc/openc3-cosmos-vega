@@ -1,4 +1,16 @@
 <!--
+# Copyright 2026 Vega Space, Inc.
+# All Rights Reserved.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE.md for more details.
+#
+# This file may also be used under the terms of a commercial license
+# if purchased from Vega Space, Inc.
+-->
+<!--
 # Onboarding tour overlay: the page dims except for a spotlighted region
 # (frame + corner brackets) with a themed card of copy beside it - the same
 # shape as the Vega app's forecast tour. The parent decides the steps,

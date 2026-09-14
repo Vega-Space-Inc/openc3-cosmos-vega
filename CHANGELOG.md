@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### License
+- Vega Plugin License (Elastic License 2.0 base, modelled on the OpenC3
+  Builder's License) replaces MIT; THIRD_PARTY_LICENSES.md carries the
+  OpenC3 Builder's License for the bundled `@openc3/js-common`.
+
 ### Widget
 - Roomier grid: station rows 40px (52px single-station), 10px between a
   band's rows, 32px between bands, 14px between pass boxes.

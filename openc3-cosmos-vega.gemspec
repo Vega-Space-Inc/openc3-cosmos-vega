@@ -8,7 +8,9 @@ Gem::Specification.new do |s|
     Polls the Vega Space REST API (vega.space) for account, ground station,
     and tracked satellite data and surfaces it as COSMOS telemetry.
   EOF
-  s.licenses = 'MIT'
+  # Custom license (text in LICENSE.md). RubyGems warns that this is not an SPDX id;
+  # the reference OpenC3 plugins carry the same warning with 'OpenC3'. The store shows the string.
+  s.licenses = 'Vega Plugin License'
   s.authors = ['Vega']
   s.email = ['tom@vega.space']
   s.homepage = 'https://vega.space'
@@ -21,7 +23,7 @@ Gem::Specification.new do |s|
     time = Time.now.strftime("%Y%m%d%H%M%S")
     s.version = '0.0.0' + ".#{time}"
   end
-  s.files = Dir.glob("{targets,lib,public,tools,microservices}/**/*") + %w(Rakefile README.md LICENSE.md plugin.txt) # the widget .map must ship: WidgetModel copies it at install
+  s.files = Dir.glob("{targets,lib,public,tools,microservices}/**/*") + %w(Rakefile README.md LICENSE.md THIRD_PARTY_LICENSES.md plugin.txt) # the widget .map must ship: WidgetModel copies it at install
 
   s.metadata = {
     # These fields are used when you submit your plugin to the OpenC3 Store at store.openc3.com

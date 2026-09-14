@@ -144,4 +144,5 @@ with `OBFUSCATE` if it needs a key.
 
 ## License
 
-See [LICENSE.md](LICENSE.md).
+See [LICENSE.md](LICENSE.md). Bundled third-party components are listed in
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
