@@ -59,7 +59,7 @@ By submitting a Contribution, you agree to the following terms:
 
 ## Governing Law
 
-This license shall be governed by and construed in accordance with the laws of the State of [STATE OF INCORPORATION — counsel to confirm], without regard to its conflict of law provisions.
+This license shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of law provisions.
 
 ## Commercial Licensing and Contact Information
 
