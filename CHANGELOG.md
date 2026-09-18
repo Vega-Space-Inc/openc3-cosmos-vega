@@ -8,8 +8,8 @@
   OpenC3 Builder's License for the bundled `@openc3/js-common`.
 
 ### Widget
-- Roomier grid: station rows 40px (52px single-station), 10px between a
-  band's rows, 32px between bands, 14px between pass boxes.
+- Grid spacing: station rows 40px (52px single-station), 4px between a
+  band's rows, 32px between bands, 6px between pass boxes.
 - Takes the target name as its screen parameter (`TIMELINE <%= target_name %>`),
   defaulting to VEGA.
 
