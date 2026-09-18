@@ -1014,10 +1014,10 @@ const MAX_BACK_DAYS = 30
 // zoom (passGapUnits converts it), so each pass reads as its own block. A
 // satellite that is always visible (GEO) yields a single day-long pass and
 // keeps normal clock ticks.
-const PASS_GAP_PX = 14
-// Vertical gap between band rows - the same size as the gap between
-// passes, so the chart reads as a grid of (pass x band) cells.
-const LANE_GAP_PX = 10
+const PASS_GAP_PX = 6
+// Vertical gap between band rows - close to the gap between passes, so
+// the chart reads as a grid of (pass x band) cells.
+const LANE_GAP_PX = 4
 // Context minutes on each side of a pass. Zero: slices (unlike the old
 // lines) don't need to rise from a baseline, and any padding is dead space
 // inside the box.
