@@ -10,6 +10,12 @@
 ### Widget
 - Grid spacing: station rows 40px (52px single-station), 4px between a
   band's rows, 32px between bands, 6px between pass boxes.
+- Fix: closing an open cell took two clicks. The open cell was recognised
+  by its x range, which shifts with the lane width when the expanded row
+  reflows the screen; it is now recognised by its minute indexes, and the
+  zoom follows its cell when the layout shifts.
+- Fix: with VEGA_INT not answering, the widget asked for an API key instead
+  of reporting the interface.
 - Takes the target name as its screen parameter (`TIMELINE <%= target_name %>`),
   defaulting to VEGA.
 
