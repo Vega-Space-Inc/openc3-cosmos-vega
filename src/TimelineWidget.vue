@@ -1289,6 +1289,8 @@ export default {
       // this browser has no key of its own. Memory only - never stored.
       demoKey: null,
       demoOrgName: '',
+      // True when GET_DEMO_KEY got no answer at all (see fetchDemoKey)
+      demoKeyUnanswered: false,
       // The connect-your-own-key dialog (from the demo banner or the menu)
       showKeyDialog: false,
       savingKey: false,
@@ -2788,12 +2790,14 @@ export default {
             return
           }
         }
-        // No response either way. With no key in this browser, the
-        // interface protocol drops authenticated requests outright (it has
-        // nothing to sign them with unless the VEGA_API_KEY secret exists),
-        // so silence means "no key", not "Vega is down".
+        // No response either way. With no key on the request, the interface
+        // protocol drops it outright (it has nothing to sign it with unless
+        // the VEGA_API_KEY secret exists), so silence means "no key", not
+        // "Vega is down" - unless the public demo key request went unanswered
+        // too, which only a dead interface explains.
+        const sentWithKey = !!(this.savedApiKey || this.demoKey)
         this.setIntegrationState(
-          this.savedApiKey ? 'unavailable' : 'missing_key',
+          sentWithKey || this.demoKeyUnanswered ? 'unavailable' : 'missing_key',
         )
       } catch (e) {
         this.setIntegrationState('unavailable')
@@ -2835,12 +2839,17 @@ export default {
           timeoutMs: 15000,
           label: 'demo key',
         })
+        this.demoKeyUnanswered = false
         const key = status === 200 ? String(values.API_KEY || '').trim() : ''
         if (!key.startsWith('vgk_')) return false
         this.demoKey = key
         this.demoOrgName = String(values.ORG_NAME || '')
         return true
       } catch (e) {
+        // An HTTP error carries a status; a timeout does not. GET_DEMO_KEY is
+        // a public path the interface never drops, so no answer at all means
+        // VEGA_INT is not servicing commands - not that a key is missing.
+        this.demoKeyUnanswered = e?.status === undefined
         return false
       }
     },
