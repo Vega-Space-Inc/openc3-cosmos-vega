@@ -2408,6 +2408,10 @@ export default {
     },
   },
   watch: {
+    // Pass x coordinates move with the lane width - see reanchorCellZoom
+    segments() {
+      this.reanchorCellZoom()
+    },
     bands(newBands) {
       const v = {}
       newBands.forEach((b) => {
@@ -2943,25 +2947,66 @@ export default {
         if (seg) {
           const idx = seg.startIdx + Math.floor(c - seg.cstart)
           const sp = this.spanAt(band, idx)
-          if (sp) seg = { cstart: sp.cstart, clen: sp.clen }
+          if (sp) seg = sp
         }
       }
       if (!seg) {
         this.expandedBand = this.expandedBand === band ? null : band
         return
       }
-      const range = [seg.cstart, seg.cstart + seg.clen]
+      // "Is this the open cell?" is answered in minute indexes, never in
+      // compressed coordinates: those depend on the lane's pixel width
+      // (passGapUnits), and expanding a row reflows the screen enough to
+      // shift every pass after the first by a fraction of a unit. Comparing
+      // ranges made the second click re-zoom to the shifted range instead
+      // of closing. The stored range only tells a cell zoom from a drag-zoom
+      // made since.
+      const open = this._cellZoom
       const sameZoom =
-        this.zoomRange &&
-        this.zoomRange[0] === range[0] &&
-        this.zoomRange[1] === range[1]
+        !!open &&
+        !!this.zoomRange &&
+        this.zoomRange[0] === open.range[0] &&
+        this.zoomRange[1] === open.range[1] &&
+        open.startIdx === seg.startIdx &&
+        open.endIdx === seg.endIdx
       if (sameZoom && this.expandedBand === band) {
+        this._cellZoom = null
         this.zoomRange = null
         this.expandedBand = null
       } else {
+        const range = [seg.cstart, seg.cstart + seg.clen]
+        this._cellZoom = {
+          band,
+          startIdx: seg.startIdx,
+          endIdx: seg.endIdx,
+          range,
+        }
         this.zoomRange = range
         this.expandedBand = band
       }
+    },
+    // Keeps a cell zoom on its cell when the compressed layout shifts under
+    // it (lane resized, passes reloaded); drops it if the cell is gone.
+    reanchorCellZoom() {
+      const open = this._cellZoom
+      if (!open || !this.zoomRange) return
+      if (
+        this.zoomRange[0] !== open.range[0] ||
+        this.zoomRange[1] !== open.range[1]
+      ) {
+        this._cellZoom = null // a drag-zoom or reset replaced it
+        return
+      }
+      const match = (sp) =>
+        sp.startIdx === open.startIdx && sp.endIdx === open.endIdx
+      const sp =
+        (this.rowSpans[open.band] || []).find(match) ||
+        this.segments.find(match)
+      if (!sp) return
+      const range = [sp.cstart, sp.cstart + sp.clen]
+      if (range[0] === open.range[0] && range[1] === open.range[1]) return
+      open.range = range
+      this.zoomRange = range
     },
     // --- Satellite telemetry overlay (COSMOS streaming) ---
     async loadTlmTargets() {
