@@ -30,7 +30,8 @@ TELEMETRY <%= target_name %> HEALTH BIG_ENDIAN "Vega API health check (no auth r
 # of the buffer). HTTP_STATUS tells you which kind of error it was.
 TELEMETRY <%= target_name %> ERROR_RESPONSE BIG_ENDIAN "Non-2xx response from any Vega endpoint (bad/expired key, no approved org access, rate limit, not found, server error). Raw body, see HTTP_STATUS for the code."
   ACCESSOR HttpAccessor BinaryAccessor
-  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, e.g. 401 = bad/expired VEGA_API_KEY secret, 404 = unknown org or no approved access to it for this key, or no data in range, 429 = rate limited, 5xx = Vega server error"
+  ITEM HTTP_STATUS 0 0 DERIVED "HTTP response status code, e.g. 401 = missing/bad/expired VEGA_API_KEY secret, 404 = unknown org or no approved access to it for this key, or no data in range, 429 = rate limited, 5xx = Vega server error"
+  ITEM HTTP_PATH 0 0 DERIVED "Path of the request that failed, e.g. /api/v1/frontend/organizations/1/forecasting/summary (stamped by vega_http_client_interface.rb)"
   APPEND_ITEM BODY 0 STRING "Raw response body (HTML or JSON, unparsed)"
 
 TELEMETRY <%= target_name %> DEMO_KEY BIG_ENDIAN "Vega's public demo API key: read-only access to the Demo Org, served by Vega so it can be rotated without a plugin release. Nothing secret - it is what any visitor gets."

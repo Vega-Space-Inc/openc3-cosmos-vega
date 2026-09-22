@@ -31,6 +31,26 @@
 .asi-info-body code {
   font-size: 12px;
 }
+/* Connect dialog: the secret's state and the two setup steps */
+.keydlg-status {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.keydlg-status-ok {
+  background: rgba(129, 199, 132, 0.15);
+  color: #a5d6a7;
+}
+.keydlg-status-bad {
+  background: rgba(229, 115, 115, 0.15);
+  color: #ef9a9a;
+}
+.keydlg-steps {
+  margin: 0 0 14px;
+  padding-left: 22px;
+  line-height: 1.6;
+}
 .keydlg-nokey-text {
   margin: 0 0 10px;
 }

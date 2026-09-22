@@ -25,13 +25,13 @@
 # minute
 # where the satellite isn't covered/visible from the ground station is
 # plotted as zero interactions (not a gap). If the target has no
-# working Vega connection yet, an onboarding state lets the user paste their
-# own Vega frontend API key: it stays in that browser (localStorage) and is
-# sent with each command as the OBFUSCATEd HTTP_HEADER_AUTHORIZATION
-# parameter, which COSMOS masks in Command Sender and the text log and the
-# interface protocol strips from the packet before the command logs are
-# written. The VEGA_API_KEY COSMOS secret is only an optional fallback for
-# the plugin's background polls.
+# working Vega connection yet, an onboarding state says so and points a
+# COSMOS admin at Admin / Secrets. The plugin uses ONE key - the VEGA_API_KEY
+# secret - and the widget never sees it: commands go out with no key and the
+# interface protocol reads the secret when it sends each request. Vega's
+# public demo key is the one key that does pass through the browser (as the
+# OBFUSCATEd HTTP_HEADER_AUTHORIZATION), so a fresh install shows data before
+# the secret exists.
 # Driven by the VEGA COSMOS target's GET_DAY_DETAIL command / DAY_DETAIL
 # telemetry, specifically the per-minute MINUTES_JSON breakdown (real
 # per-band interference counts from admin.vega.space/api/v1/frontend/
@@ -77,62 +77,26 @@
           {{ integrationMessage }}
         </div>
 
-        <!-- The user's own Vega frontend API key. It is kept in this
-             browser only (localStorage) and sent with each command as the
-             OBFUSCATEd HTTP_HEADER_AUTHORIZATION parameter: COSMOS masks it
-             in Command Sender and the text log, and the interface protocol
-             strips it from the packet before the command logs are written.
-             Nothing is stored server-side. -->
-        <form
-          v-if="showSetupSteps"
-          class="onboarding-keyform"
-          @submit.prevent="saveApiKey"
-        >
-          <label class="onboarding-keylabel" for="vega-api-key">
-            Your Vega API key
-          </label>
-          <div class="onboarding-keyrow">
-            <input
-              id="vega-api-key"
-              v-model="apiKeyInput"
-              class="onboarding-input"
-              type="password"
-              placeholder="vgk_…"
-              autocomplete="off"
-              spellcheck="false"
-              :disabled="savingKey"
-            />
-            <button
-              type="submit"
-              class="onboarding-save"
-              :disabled="savingKey || !apiKeyInput.trim()"
-            >
-              {{ savingKey ? 'Checking…' : 'Connect' }}
-            </button>
-          </div>
-          <div v-if="saveKeyError" class="onboarding-error">
-            {{ saveKeyError }}
-          </div>
-          <div v-if="savedApiKey" class="onboarding-keystatus">
-            A key ending in <code>{{ savedApiKeyTail }}</code> is saved in this
-            browser.
-            <button
-              type="button"
-              class="onboarding-forget"
-              @click="forgetApiKey"
-            >
-              Forget it
-            </button>
-          </div>
-          <div class="onboarding-keynote">
-            Stays in this browser; COSMOS masks it in logs and never stores it.
-            No key yet? Create a <em>frontend</em> API key (it starts with
+        <!-- The plugin uses one key, the VEGA_API_KEY secret in COSMOS
+             Admin / Secrets. Nothing is entered here. -->
+        <ol v-if="showSetupSteps" class="onboarding-steps">
+          <li>
+            Create a <em>frontend</em> API key (it starts with
             <code>vgk_</code>) at
             <a :href="VEGA_API_KEYS_URL" target="_blank" rel="noopener"
               >app.vega.space/settings/api-keys</a
             >.
-          </div>
-        </form>
+          </li>
+          <li>
+            Have a COSMOS admin add it in
+            <a :href="COSMOS_SECRETS_URL" target="_blank" rel="noopener"
+              >Admin → Secrets</a
+            >
+            as <code>{{ SHARED_SECRET_NAME }}</code>. It takes effect on the
+            next request - no restart needed.
+          </li>
+          <li>Click the refresh button above to check again.</li>
+        </ol>
 
         <div class="onboarding-actions">
           <a
@@ -172,7 +136,7 @@
           type="button"
           class="demo-cta"
           data-tour="connect"
-          @click="showKeyDialog = true"
+          @click="openKeyDialog"
         >
           Connect your own data →
         </button>
@@ -340,17 +304,12 @@
                 </v-list-item>
                 <v-divider />
               </template>
-              <v-list-item @click="showKeyDialog = true">
+              <v-list-item @click="openKeyDialog">
                 <v-list-item-title>{{
-                  savedApiKey
-                    ? 'Change your Vega API key…'
-                    : 'Connect your Vega account…'
+                  usingSharedKey
+                    ? 'About the Vega API key…'
+                    : 'Connect your own data…'
                 }}</v-list-item-title>
-              </v-list-item>
-              <v-list-item v-if="savedApiKey" @click="forgetApiKey">
-                <v-list-item-title
-                  >Forget saved key (…{{ savedApiKeyTail }})</v-list-item-title
-                >
               </v-list-item>
               <v-divider />
               <v-list-item @click="startTour(true)">
@@ -928,12 +887,16 @@
 
         <connect-key-dialog
           v-model="showKeyDialog"
-          :saving="savingKey"
-          :error="saveKeyError"
+          :shared-key="sharedKey"
+          :status="sharedKeyStatus"
+          :detail="sharedKeyDetail"
+          :checking="checkingIntegration"
+          :secret-name="SHARED_SECRET_NAME"
+          :secrets-url="COSMOS_SECRETS_URL"
           :api-keys-url="VEGA_API_KEYS_URL"
           :signup-url="VEGA_SIGNUP_URL"
           :signin-url="VEGA_SIGNIN_URL"
-          @submit="saveApiKey"
+          @check="checkFromDialog"
         />
 
         <asi-info-dialog v-model="showAsiInfo" />
@@ -981,13 +944,12 @@ import {
   bandTint,
 } from './lib/bands'
 import {
-  API_KEY_LS_KEY,
   SIZE_LS_KEY,
   TIME_24H_LS_KEY,
   TOUR_LS_KEY,
   readStoredFlag,
   readStoredSize,
-  readStoredApiKey,
+  scrubLegacyApiKey,
 } from './lib/storage'
 // Deliberately no import of the COSMOS vue-common Widget mixin: it pulls
 // ~2 MB of the COSMOS shell (which already loads it) into this bundle, and the
@@ -1098,7 +1060,17 @@ const INTEGRATION_CHECK_TIMEOUT_MS = 8000
 // (background periodic polls included), so it is attributed to a request
 // only when it landed after that request's stamp-before-send.
 const ERROR_PACKET = 'ERROR_RESPONSE'
-const ERROR_ITEMS = ['RECEIVED_TIMESECONDS', 'HTTP_STATUS', 'BODY']
+const ERROR_ITEMS = ['RECEIVED_TIMESECONDS', 'HTTP_STATUS', 'BODY', 'HTTP_PATH']
+// The request path each command hits (its last segment), so an error can be
+// matched to the request that caused it - see errorMatches.
+const COMMAND_PATH_SUFFIX = {
+  GET_DEMO_KEY: '/demo_key',
+  GET_APPROVED_ORGS: '/approved_organizations',
+  GET_WORKSPACE: '/workspace',
+  GET_FORECASTING_SUMMARY: '/forecasting/summary',
+  GET_DAY_DETAIL: '/day_detail',
+  GET_HISTORY: '/history',
+}
 // Everything the connection check reads, in one get_tlm_values call.
 const INTEGRATION_SPEC = {
   APPROVED_ORGS: ['RECEIVED_TIMESECONDS', 'HTTP_STATUS', 'ORGANIZATIONS_JSON'],
@@ -1111,6 +1083,17 @@ function stampOf(values) {
 }
 // The interesting part of an ERROR_RESPONSE body for a user-facing message:
 // a short plain string, never an HTML page or a JSON blob.
+// Whether an ERROR_RESPONSE snapshot answers a request for `pathSuffix`.
+// Every Vega error lands in the one ERROR_RESPONSE packet, the background
+// polls' included - a 401 every period while no VEGA_API_KEY secret is
+// configured, say - so a widget request must not take the next error it
+// sees for its own. The interface stamps each response with the request's
+// HTTP_PATH (see vega_http_client_interface.rb); an older packet without
+// it matches anything.
+function errorMatches(err, pathSuffix) {
+  const path = String(err.HTTP_PATH || '').split('?')[0]
+  return !path || !pathSuffix || path.endsWith(pathSuffix)
+}
 function shortErrorBody(body) {
   if (typeof body !== 'string') return ''
   const text = body.trim()
@@ -1120,6 +1103,12 @@ function shortErrorBody(body) {
 const VEGA_API_KEYS_URL = 'https://app.vega.space/settings/api-keys'
 const VEGA_SIGNUP_URL = 'https://app.vega.space/signup'
 const VEGA_SIGNIN_URL = 'https://app.vega.space/login'
+// COSMOS Admin / Secrets, where the Vega API key is kept. Same origin as
+// the dashboard, so a relative path works on any host.
+const COSMOS_SECRETS_URL = '/tools/admin/secrets'
+// The one secret the plugin uses (plugin.txt: SECRET ENV VEGA_API_KEY ...).
+// Named here only for the setup copy - the widget never reads it.
+const SHARED_SECRET_NAME = 'VEGA_API_KEY'
 const VEGA_APP_URL = 'https://app.vega.space'
 // The user's own Vega API key is kept in this browser only. It is never
 // written to a COSMOS setting (get_setting needs no more than viewer rights,
@@ -1144,7 +1133,7 @@ const TOUR_STEPS = [
   {
     id: 'connect',
     title: 'Connect your own data',
-    body: "You are looking at Vega's demo satellites. Connect a Vega API key here to see your organization's satellites and ground stations.",
+    body: "You are looking at Vega's demo satellites. Once a COSMOS admin has put your Vega API key in the VEGA_API_KEY secret, the chart shows your organization's satellites and ground stations instead - this explains how.",
   },
 ]
 const TOUR_CARD_W = 320
@@ -1274,6 +1263,8 @@ export default {
       // drives how many minutes each slice covers (see slotMinutes).
       laneWidthPx: 0,
       VEGA_API_KEYS_URL,
+      COSMOS_SECRETS_URL,
+      SHARED_SECRET_NAME,
       VEGA_SIGNUP_URL,
       VEGA_SIGNIN_URL,
       // true once we've classified the last APPROVED_ORGS response as not a
@@ -1282,19 +1273,23 @@ export default {
       notIntegrated: false,
       // 'checking' | 'connected' | 'missing_key' | 'no_access' | 'unavailable'
       integrationState: 'checking',
-      // Browser-held Vega API key (see API_KEY_LS_KEY) and the entry form
-      apiKeyInput: '',
-      savedApiKey: readStoredApiKey(),
+      // What the last check found the VEGA_API_KEY secret to be, for the
+      // connect dialog: 'unknown' | 'ok' | 'invalid' (401) | 'error' (any
+      // other HTTP status) | 'unavailable' (no answer)
+      sharedKey: 'unknown',
+      sharedKeyStatus: null,
+      sharedKeyDetail: '',
+      // Connected on the VEGA_API_KEY secret (commands go out with no key
+      // and the interface signs them) rather than on the demo key
+      usingSharedKey: false,
       // Vega's public demo key (read-only, Demo Org), fetched from Vega when
       // this browser has no key of its own. Memory only - never stored.
       demoKey: null,
       demoOrgName: '',
       // True when GET_DEMO_KEY got no answer at all (see fetchDemoKey)
       demoKeyUnanswered: false,
-      // The connect-your-own-key dialog (from the demo banner or the menu)
+      // The connect-your-own-data dialog (from the demo banner or the menu)
       showKeyDialog: false,
-      savingKey: false,
-      saveKeyError: '',
       checkingIntegration: false,
       // Error from the last "check again" attempt (e.g. the command could not
       // be sent because VEGA_INT is not connected).
@@ -1378,21 +1373,16 @@ export default {
     demoMode() {
       return (
         this.integrationState === 'connected' &&
-        !this.savedApiKey &&
+        !this.usingSharedKey &&
         !!this.demoKey
       )
-    },
-    savedApiKeyTail() {
-      return this.savedApiKey ? this.savedApiKey.slice(-4) : ''
     },
     integrationTitle() {
       switch (this.integrationState) {
         case 'no_access':
           return 'No approved organizations yet'
         case 'missing_key':
-          return this.savedApiKey
-            ? 'Vega rejected the saved API key'
-            : 'Enter your Vega API key'
+          return 'COSMOS has no valid Vega API key'
         case 'checking':
           return 'Checking the Vega connection…'
         default:
@@ -1409,9 +1399,7 @@ export default {
         case 'no_access':
           return `The API key works, but its user has no approved organization access${detail}. Approve an organization in Vega, then check again.`
         case 'missing_key':
-          return this.savedApiKey
-            ? `Vega rejected the saved API key (HTTP 401${detail}). Enter a new one below.`
-            : 'Vega needs your API key to load forecasts. Paste it below - it stays in this browser.'
+          return `Vega rejected the request (HTTP 401${detail}): the ${SHARED_SECRET_NAME} secret is missing, or the key in it has expired. A COSMOS admin can create or update it in Admin → Secrets - it takes effect on the next request.`
         case 'checking':
           return 'Reading the last Vega response from COSMOS…'
         default:
@@ -1419,11 +1407,7 @@ export default {
             this.integrationStatus
               ? `Vega returned HTTP ${this.integrationStatus}${detail}.`
               : 'COSMOS has no response from VEGA_INT yet.'
-          } Check that the VEGA_INT interface is connected, then check again${
-            this.savedApiKey
-              ? ''
-              : ' - and if you have not entered your Vega API key yet, add it below'
-          }.`
+          } Check that the VEGA_INT interface is connected, then check again.`
       }
     },
     // The setup steps only help when the setup is what's missing - in
@@ -2515,6 +2499,7 @@ export default {
     } catch (e) {
       // keep the default ('local')
     }
+    scrubLegacyApiKey()
     await this.checkIntegration()
     // Telemetry overlay is COSMOS-local, so it works even when the Vega
     // integration isn't connected yet.
@@ -2714,101 +2699,151 @@ export default {
       })
       this._laneResizeObserver.observe(el)
     },
-    // Classifies the Vega connection on mount. The API key never passes
-    // through the widget (the interface protocol injects the VEGA_API_KEY
-    // COSMOS secret), so all it can do is read what the interface got back.
-    // Fast path: APPROVED_ORGS already holds a 200 from the periodic poll ->
-    // classify it without a round trip to Vega. Otherwise (never received,
-    // or a stale success we can't vouch for) run the active probe.
+    // Classifies the Vega connection on mount. The plugin has ONE key - the
+    // VEGA_API_KEY secret in COSMOS - and the widget never sees it: the
+    // interface protocol reads it when it sends each request. So all the
+    // widget can do is ask and read what came back.
+    // Fast path: APPROVED_ORGS already holds a 200 from the background polls
+    // (they run on that secret) -> the secret works; classify it without a
+    // round trip to Vega. Otherwise run the active check.
     async checkIntegration() {
-      // With no key of its own, get the public demo key FIRST. Every later
-      // request (workspace, day detail) needs some key on it - the interface
-      // drops keyless requests - so a browser with none must not be told it
-      // is connected just because the CVT holds a 200 from someone else's
-      // (or an earlier) key.
-      if (!this.savedApiKey && !this.demoKey) await this.fetchDemoKey()
-      const haveKey = !!(this.savedApiKey || this.demoKey)
       try {
         const snap = await this.readPackets(INTEGRATION_SPEC)
         const ok = snap.APPROVED_ORGS
-        if (
-          haveKey &&
-          stampOf(ok) > 0 &&
-          (Number(ok.HTTP_STATUS) || 0) === 200
-        ) {
+        if (stampOf(ok) > 0 && (Number(ok.HTTP_STATUS) || 0) === 200) {
+          this.noteSharedKey('ok')
+          this.usingSharedKey = true
           this.applyApprovedOrgs(ok.ORGANIZATIONS_JSON)
           return
         }
       } catch (e) {
-        // fall through to the active probe
+        // fall through to the active check
       }
       await this.retryIntegrationCheck()
     },
-    // "Check again" button in the onboarding state (and the mount-time
-    // fallback): sends GET_APPROVED_ORGS and waits for the answer to land.
-    // A success lands in APPROVED_ORGS; any HTTP error lands in the shared
-    // ERROR_RESPONSE packet instead (see ERROR_PACKET), so both are stamped
-    // before the send and whichever advances first is the answer:
-    //   APPROVED_ORGS advanced -> connected, or no_access when no orgs
-    //   ERROR_RESPONSE advanced -> 401 missing_key, 403 no_access,
-    //                              anything else (429, 5xx) unavailable
-    //   neither within the timeout -> unavailable ("no response")
+    // The active check (the refresh button in the onboarding state, the
+    // mount-time fallback, "Check again" in the connect dialog). First
+    // GET_APPROVED_ORGS with no key of its own, which the interface signs
+    // with the VEGA_API_KEY secret: 200 means the secret works and the chart
+    // shows that key's organizations. Failing that, Vega's public demo key,
+    // so a fresh install shows data before the secret exists.
     async retryIntegrationCheck() {
       this.checkingIntegration = true
       this.integrationCheckError = ''
       try {
-        const before = await this.readPackets(INTEGRATION_SPEC)
-        const okStamp = stampOf(before.APPROVED_ORGS)
-        const errStamp = stampOf(before[ERROR_PACKET])
-        try {
-          await this.api.cmd(
-            this.targetName,
-            'GET_APPROVED_ORGS',
-            this.authOverride(),
-            CMD_OPTS,
-            CMD_KWARGS,
+        const shared = await this.probeApprovedOrgs({})
+        if (shared.kind === 'ok') {
+          this.noteSharedKey('ok')
+          this.usingSharedKey = true
+          this.applyApprovedOrgs(shared.orgs)
+          return
+        }
+        if (shared.kind === 'error') {
+          this.noteSharedKey(
+            shared.status === 401 ? 'invalid' : 'error',
+            shared.status,
+            shared.detail,
           )
-        } catch (e) {
-          if (!isAckTimeout(e)) throw e
+        } else {
+          this.noteSharedKey('unavailable')
         }
-        const deadline = Date.now() + INTEGRATION_CHECK_TIMEOUT_MS
-        while (Date.now() < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
-          const snap = await this.readPackets(INTEGRATION_SPEC)
-          const ok = snap.APPROVED_ORGS
-          const err = snap[ERROR_PACKET]
-          if (stampOf(ok) > okStamp) {
-            this.applyApprovedOrgs(ok.ORGANIZATIONS_JSON)
+        this.usingSharedKey = false
+        // The demo: only worth trying when the interface answers at all
+        if (!this.demoKey && shared.kind === 'error') await this.fetchDemoKey()
+        if (this.demoKey) {
+          const demo = await this.probeApprovedOrgs(this.authOverride())
+          if (demo.kind === 'ok') {
+            this.applyApprovedOrgs(demo.orgs)
             return
           }
-          if (stampOf(err) > errStamp) {
-            const status = Number(err.HTTP_STATUS) || 0
-            const detail = shortErrorBody(err.BODY)
-            if (status === 401) {
-              this.setIntegrationState('missing_key', status, detail)
-            } else if (status === 403) {
-              this.setIntegrationState('no_access', status, detail)
-            } else {
-              this.setIntegrationState('unavailable', status, detail)
-            }
+          if (demo.kind === 'error') {
+            this.classifyError(demo.status, demo.detail)
             return
           }
+          this.setIntegrationState('unavailable')
+          return
         }
-        // No response either way. With no key on the request, the interface
-        // protocol drops it outright (it has nothing to sign it with unless
-        // the VEGA_API_KEY secret exists), so silence means "no key", not
-        // "Vega is down" - unless the public demo key request went unanswered
-        // too, which only a dead interface explains.
-        const sentWithKey = !!(this.savedApiKey || this.demoKey)
-        this.setIntegrationState(
-          sentWithKey || this.demoKeyUnanswered ? 'unavailable' : 'missing_key',
-        )
+        // No demo either: the shared-key answer is the answer
+        if (shared.kind === 'error') {
+          this.classifyError(shared.status, shared.detail)
+        } else {
+          // Neither request was answered: VEGA_INT is not servicing commands
+          this.setIntegrationState('unavailable')
+        }
       } catch (e) {
         this.setIntegrationState('unavailable')
         this.integrationCheckError = `Could not check the Vega connection: ${e.message}`
       } finally {
         this.checkingIntegration = false
       }
+    },
+    // "Check again" in the connect dialog: closes it once the secret works.
+    async checkFromDialog() {
+      await this.retryIntegrationCheck()
+      if (this.usingSharedKey && this.integrationState === 'connected') {
+        this.showKeyDialog = false
+        await this.loadWorkspaceForCurrentOrg()
+      }
+    },
+    noteSharedKey(state, status = null, detail = '') {
+      this.sharedKey = state
+      this.sharedKeyStatus = status
+      this.sharedKeyDetail = detail
+    },
+    classifyError(status, detail) {
+      if (status === 401) {
+        this.setIntegrationState('missing_key', status, detail)
+      } else if (status === 403) {
+        this.setIntegrationState('no_access', status, detail)
+      } else {
+        this.setIntegrationState('unavailable', status, detail)
+      }
+    },
+    // Sends GET_APPROVED_ORGS with `params` and waits for the answer to
+    // land. A success lands in APPROVED_ORGS; any HTTP error lands in the
+    // shared ERROR_RESPONSE packet instead (see ERROR_PACKET), so both are
+    // stamped before the send and whichever advances first - and, for an
+    // error, belongs to this request (errorMatches) - is the answer:
+    //   { kind: 'ok', orgs }                 APPROVED_ORGS advanced
+    //   { kind: 'error', status, detail }    ERROR_RESPONSE advanced
+    //   { kind: 'none' }                     neither within the timeout
+    async probeApprovedOrgs(params) {
+      const before = await this.readPackets(INTEGRATION_SPEC)
+      const okStamp = stampOf(before.APPROVED_ORGS)
+      let errStamp = stampOf(before[ERROR_PACKET])
+      try {
+        await this.api.cmd(
+          this.targetName,
+          'GET_APPROVED_ORGS',
+          params,
+          CMD_OPTS,
+          CMD_KWARGS,
+        )
+      } catch (e) {
+        if (!isAckTimeout(e)) throw e
+      }
+      const deadline = Date.now() + INTEGRATION_CHECK_TIMEOUT_MS
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+        const snap = await this.readPackets(INTEGRATION_SPEC)
+        const ok = snap.APPROVED_ORGS
+        const err = snap[ERROR_PACKET]
+        if (stampOf(ok) > okStamp) {
+          return { kind: 'ok', orgs: ok.ORGANIZATIONS_JSON }
+        }
+        if (stampOf(err) > errStamp) {
+          errStamp = stampOf(err)
+          if (!errorMatches(err, COMMAND_PATH_SUFFIX.GET_APPROVED_ORGS)) {
+            continue // a background poll's error, not this request's
+          }
+          return {
+            kind: 'error',
+            status: Number(err.HTTP_STATUS) || 0,
+            detail: shortErrorBody(err.BODY),
+          }
+        }
+      }
+      return { kind: 'none' }
     },
     // A 200 APPROVED_ORGS response: connected when it lists organizations,
     // otherwise the key works but has no approved org.
@@ -2823,12 +2858,16 @@ export default {
       // actual workspace fetch.
       this.selectedOrgId = this.organizations[0].id
     },
-    // --- The user's own Vega API key (browser-only) ---
-    // Sent with every command as the OBFUSCATEd HTTP_HEADER_AUTHORIZATION
-    // parameter. Absent -> the interface falls back to the VEGA_API_KEY secret.
+    // --- Which key each command is sent with ---
+    // On the VEGA_API_KEY secret: none - the interface protocol reads the
+    // secret and signs the request. Otherwise Vega's public demo key, as
+    // the OBFUSCATEd HTTP_HEADER_AUTHORIZATION.
     authOverride() {
-      const key = this.savedApiKey || this.demoKey
-      return key ? { HTTP_HEADER_AUTHORIZATION: `Bearer ${key}` } : {}
+      if (this.usingSharedKey || !this.demoKey) return {}
+      return { HTTP_HEADER_AUTHORIZATION: `Bearer ${this.demoKey}` }
+    },
+    openKeyDialog() {
+      this.showKeyDialog = true
     },
     // Asks Vega for its public demo key. Resolves to true when one arrived.
     async fetchDemoKey() {
@@ -2851,62 +2890,10 @@ export default {
         return true
       } catch (e) {
         // An HTTP error carries a status; a timeout does not. GET_DEMO_KEY is
-        // a public path the interface never drops, so no answer at all means
-        // VEGA_INT is not servicing commands - not that a key is missing.
+        // a public path, so no answer at all means VEGA_INT is not servicing
+        // commands - not that a key is missing.
         this.demoKeyUnanswered = e?.status === undefined
         return false
-      }
-    },
-    // From the onboarding form (no argument: reads apiKeyInput) or from the
-    // ConnectKeyDialog (the key as a string).
-    async saveApiKey(fromDialog) {
-      const key = (
-        typeof fromDialog === 'string' ? fromDialog : this.apiKeyInput || ''
-      ).trim()
-      if (!key) return
-      if (!key.startsWith('vgk_')) {
-        this.saveKeyError =
-          'Enter a Vega frontend API key - it starts with vgk_.'
-        return
-      }
-      this.saveKeyError = ''
-      this.savingKey = true
-      try {
-        this.savedApiKey = key
-        try {
-          localStorage.setItem(API_KEY_LS_KEY, key)
-        } catch (e) {
-          // storage blocked: the key still works for this page load
-        }
-        this.apiKeyInput = ''
-        await this.retryIntegrationCheck()
-        if (this.integrationState === 'missing_key') {
-          this.saveKeyError =
-            'Vega rejected that key (HTTP 401). Check it and try again.'
-        } else if (this.integrationState === 'connected') {
-          this.showKeyDialog = false
-          await this.loadWorkspaceForCurrentOrg()
-        }
-      } finally {
-        this.savingKey = false
-      }
-    },
-    async forgetApiKey() {
-      this.savedApiKey = null
-      try {
-        localStorage.removeItem(API_KEY_LS_KEY)
-      } catch (e) {
-        // nothing stored
-      }
-      this.saveKeyError = ''
-      this.showKeyDialog = false
-      this.setIntegrationState('missing_key')
-      // Back to the demo, if Vega offers one
-      if (this.demoKey || (await this.fetchDemoKey())) {
-        await this.retryIntegrationCheck()
-        if (this.integrationState === 'connected') {
-          await this.loadWorkspaceForCurrentOrg()
-        }
       }
     },
     setIntegrationState(state, status = null, detail = '') {
@@ -4118,7 +4105,12 @@ export default {
         [ERROR_PACKET]: ['RECEIVED_TIMESECONDS'],
       })
       const stamp = stampOf(before[packet])
-      const errStamp = stampOf(before[ERROR_PACKET])
+      let errStamp = stampOf(before[ERROR_PACKET])
+      // Errors are matched to the request by path: the widget's own override
+      // (day detail / history embed the org id) or the command's default.
+      const pathSuffix = params.HTTP_PATH
+        ? String(params.HTTP_PATH).split('?')[0]
+        : COMMAND_PATH_SUFFIX[command]
       try {
         await this.api.cmd(
           this.targetName,
@@ -4155,6 +4147,8 @@ export default {
         }
         const err = snap[ERROR_PACKET]
         if (stampOf(err) > errStamp) {
+          errStamp = stampOf(err)
+          if (!errorMatches(err, pathSuffix)) continue // not this request's
           const status = Number(err.HTTP_STATUS) || 0
           const detail = shortErrorBody(err.BODY)
           const error = new Error(

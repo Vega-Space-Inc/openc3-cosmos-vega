@@ -25,8 +25,12 @@
 # 2026-09-10 after a laptop network change: 20 minutes of DNS failures, then
 # a Connect / Success / Lost cycle every 5s until the process was restarted.
 #
-# Draining the queue on connect is the whole fix; everything else is the
-# stock interface.
+# Draining the queue on connect is the fix for that. The other addition:
+# each response packet carries the REQUEST's HTTP_PATH in its extra, so the
+# ERROR_RESPONSE packet (shared by every failed request, background polls
+# included) can say which request failed - the Timeline widget matches
+# errors to its own requests by it. The stock interface keeps the request's
+# extra only until it has picked the response packet, then drops it.
 #
 # plugin.txt:
 #   INTERFACE VEGA_INT vega_http_client_interface.rb <host> <port> <protocol> <write_timeout> <read_timeout> <connect_timeout>
@@ -39,6 +43,15 @@ module OpenC3
       # Discard anything left from a previous session - in practice the nil
       # that disconnect pushes - so the read thread starts on a clean queue.
       @response_queue.pop while @response_queue.length > 0
+      super
+    end
+
+    # HttpAccessor reads an HTTP_PATH item from packet.extra['HTTP_PATH'], and
+    # the stock method sets packet.extra to this very hash (minus
+    # HTTP_REQUEST), so copying the path across is all it takes.
+    def convert_data_to_packet(data, extra = nil)
+      request = extra && extra['HTTP_REQUEST'] && extra['HTTP_REQUEST'][1]
+      extra['HTTP_PATH'] = request['HTTP_PATH'].to_s if request and request['HTTP_PATH']
       super
     end
   end

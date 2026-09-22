@@ -8,17 +8,14 @@
 # CONNECT_CMD) and then on an interval (OPTION PERIODIC_CMD) - see plugin.txt.
 # You can also send them by hand from Command Sender to force a refresh.
 #
-# AUTH: two sources for the Vega frontend API key (vgk_... prefix), neither of
-# which is ever written to a COSMOS log or store:
-#   1. Per request - the Timeline widget sends the user's own key in the
-#      OBFUSCATEd HTTP_HEADER_AUTHORIZATION parameter (kept in that user's
-#      browser, entered on the dashboard). This is the normal path.
-#   2. Fallback - the COSMOS secret VEGA_API_KEY (Admin / Secrets), mounted into
-#      the interface by `SECRET ENV VEGA_API_KEY VEGA_API_KEY`, used for the
-#      background polls and any command sent without a token.
-# targets/VEGA/lib/api_key_protocol.rb applies whichever is present on the wire
-# and strips the token from the packet before the command logs are written.
-# A missing/invalid key shows up as HTTP 401 in ERROR_RESPONSE.
+# AUTH: the plugin uses ONE Vega frontend API key (vgk_... prefix) - the COSMOS
+# secret VEGA_API_KEY (Admin / Secrets). targets/VEGA/lib/api_key_protocol.rb
+# reads it when it sends each request, so it never reaches a browser, a
+# COSMOS log or the packet stream, and an update takes effect on the next
+# request. The one exception is a per-request token in the OBFUSCATEd
+# HTTP_HEADER_AUTHORIZATION parameter, which the Timeline widget uses for
+# Vega's public demo key and a person can use from Command Sender. A missing,
+# invalid or expired key shows up as HTTP 401 in ERROR_RESPONSE.
 #
 # The key is scoped to ONE Vega user - not an org - so every one of these
 # endpoints lives under /api/v1/frontend/* and is gated by that user's
@@ -49,11 +46,10 @@ COMMAND <%= target_name %> GET_APPROVED_ORGS BIG_ENDIAN "Poll the list of organi
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "APPROVED_ORGS"
   PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
-  # Optional per-request Bearer token - the Timeline widget sends the user's own
-  # Vega frontend API key here ("Bearer vgk_..."). Empty = fall back to the
-  # VEGA_API_KEY secret. OBFUSCATE masks it in Command Sender and the text log,
-  # and api_key_protocol.rb strips it from the packet before the command logs
-  # are written, so the key never lands in any COSMOS log or store.
+  # Optional per-request Bearer token; empty (the normal case) = the interface
+  # signs the request with the VEGA_API_KEY secret. OBFUSCATE masks a token in
+  # Command Sender and the text log, and api_key_protocol.rb strips it from
+  # the packet before the command logs are written.
   PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "" "Per-request Bearer token (Vega frontend API key); empty = use the VEGA_API_KEY secret"
     OBFUSCATE
 
@@ -63,11 +59,10 @@ COMMAND <%= target_name %> GET_WORKSPACE BIG_ENDIAN "Poll org workspace: satelli
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "WORKSPACE"
   PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
-  # Optional per-request Bearer token - the Timeline widget sends the user's own
-  # Vega frontend API key here ("Bearer vgk_..."). Empty = fall back to the
-  # VEGA_API_KEY secret. OBFUSCATE masks it in Command Sender and the text log,
-  # and api_key_protocol.rb strips it from the packet before the command logs
-  # are written, so the key never lands in any COSMOS log or store.
+  # Optional per-request Bearer token; empty (the normal case) = the interface
+  # signs the request with the VEGA_API_KEY secret. OBFUSCATE masks a token in
+  # Command Sender and the text log, and api_key_protocol.rb strips it from
+  # the packet before the command logs are written.
   PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "" "Per-request Bearer token (Vega frontend API key); empty = use the VEGA_API_KEY secret"
     OBFUSCATE
 
@@ -77,11 +72,10 @@ COMMAND <%= target_name %> GET_FORECASTING_SUMMARY BIG_ENDIAN "Poll interference
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "FORECASTING_SUMMARY"
   PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
-  # Optional per-request Bearer token - the Timeline widget sends the user's own
-  # Vega frontend API key here ("Bearer vgk_..."). Empty = fall back to the
-  # VEGA_API_KEY secret. OBFUSCATE masks it in Command Sender and the text log,
-  # and api_key_protocol.rb strips it from the packet before the command logs
-  # are written, so the key never lands in any COSMOS log or store.
+  # Optional per-request Bearer token; empty (the normal case) = the interface
+  # signs the request with the VEGA_API_KEY secret. OBFUSCATE masks a token in
+  # Command Sender and the text log, and api_key_protocol.rb strips it from
+  # the packet before the command logs are written.
   PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "" "Per-request Bearer token (Vega frontend API key); empty = use the VEGA_API_KEY secret"
     OBFUSCATE
 
@@ -98,11 +92,10 @@ COMMAND <%= target_name %> GET_DAY_DETAIL BIG_ENDIAN "Poll one satellite+ground_
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "DAY_DETAIL"
   PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
-  # Optional per-request Bearer token - the Timeline widget sends the user's own
-  # Vega frontend API key here ("Bearer vgk_..."). Empty = fall back to the
-  # VEGA_API_KEY secret. OBFUSCATE masks it in Command Sender and the text log,
-  # and api_key_protocol.rb strips it from the packet before the command logs
-  # are written, so the key never lands in any COSMOS log or store.
+  # Optional per-request Bearer token; empty (the normal case) = the interface
+  # signs the request with the VEGA_API_KEY secret. OBFUSCATE masks a token in
+  # Command Sender and the text log, and api_key_protocol.rb strips it from
+  # the packet before the command logs are written.
   PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "" "Per-request Bearer token (Vega frontend API key); empty = use the VEGA_API_KEY secret"
     OBFUSCATE
   APPEND_PARAMETER HTTP_QUERY_SATELLITE_ID 32 UINT MIN MAX 0 "Satellite id (from VEGA WORKSPACE SATELLITES_JSON)"
@@ -120,11 +113,10 @@ COMMAND <%= target_name %> GET_HISTORY BIG_ENDIAN "Poll historical interference 
   PARAMETER HTTP_METHOD 0 0 DERIVED nil nil "GET"
   PARAMETER HTTP_PACKET 0 0 DERIVED nil nil "HISTORY"
   PARAMETER HTTP_ERROR_PACKET 0 0 DERIVED nil nil "ERROR_RESPONSE"
-  # Optional per-request Bearer token - the Timeline widget sends the user's own
-  # Vega frontend API key here ("Bearer vgk_..."). Empty = fall back to the
-  # VEGA_API_KEY secret. OBFUSCATE masks it in Command Sender and the text log,
-  # and api_key_protocol.rb strips it from the packet before the command logs
-  # are written, so the key never lands in any COSMOS log or store.
+  # Optional per-request Bearer token; empty (the normal case) = the interface
+  # signs the request with the VEGA_API_KEY secret. OBFUSCATE masks a token in
+  # Command Sender and the text log, and api_key_protocol.rb strips it from
+  # the packet before the command logs are written.
   PARAMETER HTTP_HEADER_AUTHORIZATION 0 0 DERIVED nil nil "" "Per-request Bearer token (Vega frontend API key); empty = use the VEGA_API_KEY secret"
     OBFUSCATE
   APPEND_PARAMETER HTTP_QUERY_SATELLITE_ID 32 UINT MIN MAX 0 "Satellite id (from VEGA WORKSPACE SATELLITES_JSON)"

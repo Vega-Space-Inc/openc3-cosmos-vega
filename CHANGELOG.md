@@ -8,6 +8,15 @@
   OpenC3 Builder's License for the bundled `@openc3/js-common`.
 
 ### Widget
+- No API key is entered or kept in the widget any more: the plugin uses the
+  one `VEGA_API_KEY` secret from COSMOS Admin → Secrets. The onboarding
+  state and the connect dialog explain the two setup steps, link to
+  Admin → Secrets, and re-check on demand; a fresh install shows the demo
+  org until the secret exists. A key left in the browser by an earlier
+  version is removed.
+- Errors are matched to the request that caused them (by path), so a
+  background poll's failure - a 401 while the secret is missing - is no
+  longer taken for the answer to a widget request.
 - Grid spacing: station rows 40px (52px single-station), 4px between a
   band's rows, 32px between bands, 6px between pass boxes.
 - Fix: closing an open cell took two clicks. The open cell was recognised
@@ -20,6 +29,12 @@
   defaulting to VEGA.
 
 ### Plugin
+- The write protocol reads the `VEGA_API_KEY` secret from the secret store
+  on every request (the `SECRET ENV` variable is the fallback), so a key
+  updated in Admin → Secrets takes effect at once with no interface restart.
+  With no key at all the request now goes out unauthenticated and Vega's
+  401 lands in `ERROR_RESPONSE` (one warning), instead of being dropped.
+- `ERROR_RESPONSE` carries `HTTP_PATH`, the path of the request that failed.
 - New `vega_target_name` variable (default VEGA): the target, interface and
   polled commands are templated on it, so the plugin can be installed more
   than once, e.g. one target per organization.
