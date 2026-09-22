@@ -1,14 +1,18 @@
-# OpenC3 COSMOS Vega plugin
+# Adjacent Satellite Interference Risk for OpenC3 COSMOS
+
+*Powered by [Vega](https://vega.space).*
 
 <p align="center">
-  <img src="public/store_img.png" alt="Vega Space" width="480">
+  <img src="public/store_img.png" alt="Adjacent Satellite Interference Risk, powered by Vega" width="480">
 </p>
 
-OpenC3 COSMOS plugin for the [Vega](https://vega.space) interference
-forecasting API. It polls the organization's satellites, ground stations and
-forecast status into COSMOS telemetry, and ships a Timeline widget that draws
-each satellite's passes as a pass-by-band grid of predicted interference, with
-measured history on request.
+OpenC3 COSMOS plugin that shows the adjacent satellite interference (ASI)
+risk for your satellites and ground stations. It ships a Timeline widget
+that draws each satellite's passes as a pass-by-band grid of predicted
+interference, with measured history on request, and polls the
+organization's satellites, ground stations and forecast status into COSMOS
+telemetry. Forecasts and history come from the Vega interference
+forecasting API.
 
 ## What you get
 
