@@ -8,9 +8,9 @@
 #   bin/dev-install.sh 0.48.0     # explicit version (use for a real release)
 #
 # Then hard-refresh the browser (Cmd+Shift+R) - the widget JS is cached.
-# Optional: a VEGA_API_KEY secret in Admin > Secrets lets the background polls
-# authenticate (without it they are dropped with one warning; the widget still
-# works on the demo key or a key entered in the browser). `openc3cli load`
+# Optional: a VEGA_API_KEY secret in Admin > Secrets is the plugin's one key
+# (without it authenticated requests get 401 and the widget shows the demo
+# org). `openc3cli load`
 # auto-detects an installed openc3-cosmos-vega and upgrades it, keeping
 # vars.json's values.
 set -euo pipefail

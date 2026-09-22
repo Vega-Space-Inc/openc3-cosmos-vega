@@ -11,54 +11,70 @@
 # if purchased from Vega Space, Inc.
 -->
 <!--
-# "Connect your Vega data": paste a frontend API key. The parent owns the
-# saving state and the outcome (it talks to COSMOS); this only collects the
-# key and reports it. Styles live in dialogs.css.
+# "Connect your Vega data": how the plugin gets its API key. Nothing is
+# entered here - the key lives in COSMOS Admin / Secrets, which has its own
+# permissions and audit trail; this explains the two steps, links there, and
+# re-checks. The parent owns the check (it talks to COSMOS) and reports what
+# it found through the props. Styles live in dialogs.css.
 -->
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="520"
+    max-width="560"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card class="asi-info">
       <v-card-title class="asi-info-title">Connect your Vega data</v-card-title>
       <v-card-text class="asi-info-body">
         <p>
-          Paste a Vega <em>frontend</em> API key (it starts with
-          <code>vgk_</code>) and the chart switches from the demo satellites to
-          your organization's. The key stays in this browser; COSMOS masks it in
-          logs and never stores it.
+          This COSMOS uses one Vega API key, kept as the
+          <code>{{ secretName }}</code> secret in Admin → Secrets. Once it
+          holds a valid <em>frontend</em> key, the chart shows that key's
+          organizations instead of the demo satellites. The key never passes
+          through this page.
         </p>
-        <form class="onboarding-keyform" @submit.prevent="submit">
-          <div class="onboarding-keyrow">
-            <input
-              v-model="input"
-              class="onboarding-input"
-              type="password"
-              placeholder="vgk_…"
-              autocomplete="off"
-              spellcheck="false"
-              :disabled="saving"
-            />
-            <button
-              type="submit"
-              class="onboarding-save"
-              :disabled="saving || !input.trim()"
-            >
-              {{ saving ? 'Checking…' : 'Connect' }}
-            </button>
-          </div>
-          <div v-if="error" class="onboarding-error">
-            {{ error }}
-          </div>
-        </form>
+        <div v-if="statusText" class="keydlg-status" :class="statusClass">
+          {{ statusText }}
+        </div>
+        <ol class="keydlg-steps">
+          <li>
+            Create a frontend API key (it starts with <code>vgk_</code>) at
+            <a :href="apiKeysUrl" target="_blank" rel="noopener"
+              >app.vega.space/settings/api-keys</a
+            >.
+          </li>
+          <li>
+            Have a COSMOS admin add it in Admin → Secrets as
+            <code>{{ secretName }}</code> - or update it there if the key
+            expired. It takes effect on the next request; no restart.
+          </li>
+          <li>Check again.</li>
+        </ol>
+        <div class="keydlg-ctas">
+          <v-btn
+            color="primary"
+            variant="flat"
+            size="small"
+            :href="secretsUrl"
+            target="_blank"
+            rel="noopener"
+          >
+            Open Admin → Secrets
+          </v-btn>
+          <v-btn
+            variant="outlined"
+            size="small"
+            :loading="checking"
+            @click="$emit('check')"
+          >
+            Check again
+          </v-btn>
+        </div>
         <div class="asi-info-note keydlg-nokey">
-          <p class="keydlg-nokey-text">No key yet?</p>
+          <p class="keydlg-nokey-text">No Vega account yet?</p>
           <div class="keydlg-ctas">
             <v-btn
-              color="primary"
-              variant="flat"
+              variant="outlined"
               size="small"
               :href="signupUrl"
               target="_blank"
@@ -67,7 +83,7 @@
               Sign up
             </v-btn>
             <v-btn
-              variant="outlined"
+              variant="text"
               size="small"
               :href="signinUrl"
               target="_blank"
@@ -76,13 +92,6 @@
               Sign in
             </v-btn>
           </div>
-          <a
-            class="keydlg-apikeys"
-            :href="apiKeysUrl"
-            target="_blank"
-            rel="noopener"
-            >API keys →</a
-          >
         </div>
       </v-card-text>
       <v-card-actions>
@@ -100,26 +109,37 @@ export default {
   name: 'ConnectKeyDialog',
   props: {
     modelValue: { type: Boolean, default: false },
-    saving: { type: Boolean, default: false },
-    error: { type: String, default: '' },
+    // 'unknown' | 'ok' | 'invalid' | 'error' | 'unavailable' - see the
+    // widget's sharedKey
+    sharedKey: { type: String, default: 'unknown' },
+    status: { type: Number, default: null },
+    detail: { type: String, default: '' },
+    checking: { type: Boolean, default: false },
+    secretName: { type: String, required: true },
+    secretsUrl: { type: String, required: true },
     apiKeysUrl: { type: String, required: true },
     signupUrl: { type: String, required: true },
     signinUrl: { type: String, required: true },
   },
-  emits: ['update:modelValue', 'submit'],
-  data() {
-    return { input: '' }
-  },
-  watch: {
-    // A closed dialog forgets what was typed
-    modelValue(open) {
-      if (!open) this.input = ''
+  emits: ['update:modelValue', 'check'],
+  computed: {
+    statusText() {
+      const detail = this.detail ? `: ${this.detail}` : ''
+      switch (this.sharedKey) {
+        case 'ok':
+          return `The ${this.secretName} secret works - the chart shows its organizations.`
+        case 'invalid':
+          return `Vega rejected the ${this.secretName} secret (HTTP 401${detail}). It does not exist yet, or the key in it has expired.`
+        case 'error':
+          return `Vega answered HTTP ${this.status || '?'}${detail} on the ${this.secretName} secret.`
+        case 'unavailable':
+          return 'The last check got no answer - is the VEGA_INT interface connected?'
+        default:
+          return ''
+      }
     },
-  },
-  methods: {
-    submit() {
-      const key = this.input.trim()
-      if (key) this.$emit('submit', key)
+    statusClass() {
+      return this.sharedKey === 'ok' ? 'keydlg-status-ok' : 'keydlg-status-bad'
     },
   },
 }

@@ -19,7 +19,7 @@ measured history on request.
 | Timeline widget screen | `targets/VEGA/screens/forecast.txt` |
 | COSMOS-native status screen | `targets/VEGA/screens/status.txt` |
 | API key write protocol | `targets/VEGA/lib/api_key_protocol.rb` |
-| HTTP client interface (stock plus a reconnect fix) | `targets/VEGA/lib/vega_http_client_interface.rb` |
+| HTTP client interface (stock plus a reconnect fix; stamps each response with its request path) | `targets/VEGA/lib/vega_http_client_interface.rb` |
 | Smoke-test script | `targets/VEGA/procedures/procedure.rb` |
 | Widget source (Vue 3 + Vuetify 3) | `src/` |
 
@@ -43,14 +43,14 @@ measured history on request.
    for now.
 
 3. Open the Timeline widget (Telemetry Viewer → `VEGA FORECAST`). It shows
-   Vega's Demo Org straight away. Click **Connect your own data** and paste an
-   API key from [app.vega.space](https://app.vega.space) (Settings → API keys)
-   to see your organization.
+   Vega's Demo Org straight away. To see your organization, create an API
+   key at [app.vega.space](https://app.vega.space) (Settings → API keys)
+   and add it in **Admin → Secrets** as `VEGA_API_KEY`. The widget picks it
+   up on its next check (the refresh button, or **Connect your own data**
+   → **Check again**); no restart.
 
 4. Optional: reinstall with `vega_org_id` set to your organization's id (from
-   `APPROVED_ORGS`) so the background polls and the status screen cover it,
-   and create the `VEGA_API_KEY` secret in **Admin → Secrets** so those polls
-   can authenticate.
+   `APPROVED_ORGS`) so the background polls and the status screen cover it.
 
 ### Plugin variables
 
@@ -83,38 +83,41 @@ Vega uses **API keys** created in the app (`vgk_…`, read-only, scoped to the
 organizations your user is approved for). See the
 [API reference](https://docs.vega.space/api-reference/authentication).
 
-Two paths, and a key never reaches a COSMOS log or store on either:
-
-- **Per user, in the browser.** The widget sends the key with each command as
-  the `HTTP_HEADER_AUTHORIZATION` parameter, which is `OBFUSCATE`d and
-  stripped from the packet by the write protocol before the command logs are
-  written. It lives only in that browser; **Forget it** in the widget drops it.
-- **Shared, for the background polls.** The `VEGA_API_KEY` secret is delivered
-  as an environment variable by `SECRET` and put on the wire by the protocol.
-  Without it the authenticated polls are dropped (one warning in the log) and
-  the widget still works with a user's key.
+The plugin uses **one key**: the `VEGA_API_KEY` secret in COSMOS
+**Admin → Secrets**, which has its own permissions and audit trail. Nothing
+in the plugin takes or stores a key. The write protocol reads the secret
+when it sends each request, so the key never reaches a browser, a COSMOS log
+or the packet stream, and an update in Admin → Secrets takes effect on the
+next request with no restart. The `SECRET ENV` line mounts the same secret
+as an environment variable, the fallback if the secret store cannot be read.
 
 ```
 PROTOCOL WRITE api_key_protocol.rb Authorization VEGA_API_KEY "Bearer "
 SECRET ENV VEGA_API_KEY VEGA_API_KEY
 ```
 
-A key entered in the widget always wins for that request.
+Without the secret every authenticated request goes out unauthenticated and
+Vega answers `401` into `ERROR_RESPONSE` (one warning in the log), which the
+status screen and the widget's onboarding both report; the widget falls back
+to Vega's public demo key so a fresh install still shows data. That demo key
+travels as the `OBFUSCATE`d `HTTP_HEADER_AUTHORIZATION` parameter, masked in
+Command Sender and stripped from the packet by the protocol - the same
+parameter lets a person send a command with a key of their own by hand.
 
 ### Limits and key lifetime
 
 Each key may make 100 requests per minute
 ([rate limits](https://docs.vega.space/api-reference/rate-limits)). The
-widget's per-user key and the shared secret are separate budgets. With the
-default variables the background polls use about one request a minute, and
-the widget paces its own requests, so the limit only matters if several
-operators share one key from one instance. A `429` lands in `ERROR_RESPONSE`.
+background polls and every widget on the instance share the one key's
+budget. With the default variables the polls use about one request a
+minute, and the widget paces its own requests, so the limit only matters
+with many operators on one instance. A `429` lands in `ERROR_RESPONSE`.
 
 Keys expire one year after creation and are revoked after 90 days unused
-(the polls keep the secret in use, so the yearly expiry is the one to plan
-for). An expired key shows as `401` in `ERROR_RESPONSE` and on the status
-screen: create a new key in the app, update the secret in **Admin → Secrets**,
-and restart the interface.
+(the polls keep the shared secret in use, so the yearly expiry is the one to
+plan for). An expired key shows as `401` in `ERROR_RESPONSE`, on the status
+screen and in the widget: create a new key in the app and update the secret
+in **Admin → Secrets**; it takes effect on the next request.
 
 ## Testing without waiting for real passes
 

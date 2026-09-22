@@ -9,12 +9,14 @@
 // This file may also be used under the terms of a commercial license
 // if purchased from Vega Space, Inc.
 
-// Per-browser settings kept in localStorage.
+// Per-browser settings kept in localStorage. No API key is ever kept here:
+// the plugin uses the VEGA_API_KEY secret in COSMOS Admin / Secrets.
 
-export const API_KEY_LS_KEY = 'vega_widget_api_key'
 export const SIZE_LS_KEY = 'vega_widget_size'
 export const TIME_24H_LS_KEY = 'vega_widget_24h'
 export const TOUR_LS_KEY = 'vega_widget_tour_complete'
+// Before 0.49 the widget kept a user's own key here. Scrubbed on load.
+const LEGACY_API_KEY_LS_KEY = 'vega_widget_api_key'
 
 export function readStoredFlag(key, fallback) {
   try {
@@ -34,11 +36,10 @@ export function readStoredSize() {
     return null
   }
 }
-
-export function readStoredApiKey() {
+export function scrubLegacyApiKey() {
   try {
-    return localStorage.getItem(API_KEY_LS_KEY) || null
+    localStorage.removeItem(LEGACY_API_KEY_LS_KEY)
   } catch (e) {
-    return null // storage blocked (private mode etc.) - key lasts this page only
+    // storage blocked: nothing could have been kept
   }
 }
