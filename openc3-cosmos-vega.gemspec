@@ -14,7 +14,7 @@ Gem::Specification.new do |s|
   # Custom license (text in LICENSE.md). RubyGems warns that this is not an SPDX id;
   # the reference OpenC3 plugins carry the same warning with 'OpenC3'. The store shows the string.
   s.licenses = 'Vega Plugin License'
-  s.authors = ['Vega']
+  s.authors = ['Vega Space, Inc.']
   s.email = ['tom@vega.space']
   s.homepage = 'https://vega.space'
   s.platform = Gem::Platform::RUBY
