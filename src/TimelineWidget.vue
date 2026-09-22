@@ -54,6 +54,19 @@
     @mousedown="onRootMouseDown"
     @dblclick="onRootDblClick"
   >
+    <!-- What this is, and whose data: the product name, with Vega as the
+         source rather than the name. Shown in every state. -->
+    <div class="widget-header">
+      <span class="widget-title">Adjacent Satellite Interference Risk</span>
+      <a
+        class="widget-powered"
+        :href="VEGA_HOME_URL"
+        target="_blank"
+        rel="noopener"
+        title="Forecasts and measured history from Vega"
+        >Powered by <strong>Vega</strong></a
+      >
+    </div>
     <div v-if="notIntegrated" class="onboarding">
       <div class="onboarding-banner">
         <v-tooltip location="left" text="Re-check the Vega connection">
@@ -1100,6 +1113,7 @@ function shortErrorBody(body) {
   if (!text || text.length >= 200 || text.startsWith('<')) return ''
   return text
 }
+const VEGA_HOME_URL = 'https://vega.space'
 const VEGA_API_KEYS_URL = 'https://app.vega.space/settings/api-keys'
 const VEGA_SIGNUP_URL = 'https://app.vega.space/signup'
 const VEGA_SIGNIN_URL = 'https://app.vega.space/login'
@@ -1262,6 +1276,7 @@ export default {
       // CSS px width of the lanes area, kept current by a ResizeObserver;
       // drives how many minutes each slice covers (see slotMinutes).
       laneWidthPx: 0,
+      VEGA_HOME_URL,
       VEGA_API_KEYS_URL,
       COSMOS_SECRETS_URL,
       SHARED_SECRET_NAME,
@@ -4216,6 +4231,36 @@ export default {
      width only - the rows have fixed heights */
   resize: horizontal;
   overflow: hidden;
+}
+/* Title row: product name left, "Powered by Vega" right, sized to sit
+   quietly above the pickers rather than compete with the chart. */
+.widget-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 0 2px;
+}
+.widget-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.widget-powered {
+  margin-left: auto;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: inherit;
+  opacity: 0.65;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.widget-powered strong {
+  font-weight: 700;
+}
+.widget-powered:hover {
+  opacity: 1;
+  text-decoration: underline;
 }
 .controls-col {
   display: flex;

@@ -1,6 +1,6 @@
 SCREEN AUTO AUTO 1.0
 
-TITLE "Vega Status"
+TITLE "Adjacent Satellite Interference Risk - Status (powered by Vega)"
 
 VERTICALBOX "API Health"
   LABELVALUE <%= target_name %> HEALTH STATUS

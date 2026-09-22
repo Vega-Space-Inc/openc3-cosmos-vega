@@ -8,6 +8,9 @@
   OpenC3 Builder's License for the bundled `@openc3/js-common`.
 
 ### Widget
+- Presents as "Adjacent Satellite Interference Risk", powered by Vega: a
+  title row on the widget, and the store listing, gem summary, status
+  screen and README renamed to match.
 - No API key is entered or kept in the widget any more: the plugin uses the
   one `VEGA_API_KEY` secret from COSMOS Admin → Secrets. The onboarding
   state and the connect dialog explain the two setup steps, link to
